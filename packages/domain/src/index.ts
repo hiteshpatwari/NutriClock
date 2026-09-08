@@ -194,6 +194,31 @@ export interface AdaptiveScheduleResult {
   availability: AvailabilityDecision[];
 }
 
+export type ScheduleComplexity = "simple" | "moderate" | "complex" | "needs_attention";
+
+export interface ScheduleQualitySummary {
+  complexity: ScheduleComplexity;
+  supplementWindowCount: number;
+  blockingConflictCount: number;
+  preferenceConflictCount: number;
+  flexibleSupplementCount: number;
+  message: string;
+}
+
+export interface WeeklyReviewSummary {
+  weekStart: string;
+  weekEnd: string;
+  daysWithActivity: number;
+  supplementTakenCount: number;
+  supplementSkippedCount: number;
+  supplementSnoozedCount: number;
+  adjustmentCount: number;
+  medicationEventCount: number;
+  executionRate: number | null;
+  mostSkippedItem?: { itemId: StableId; displayName: string; count: number };
+  mostSnoozedItem?: { itemId: StableId; displayName: string; count: number };
+}
+
 export interface EvidenceReference {
   id: string;
   organization: string;
@@ -397,6 +422,15 @@ export interface ScheduleResult {
   conflicts: ScheduleConflict[];
   decisionTraces: ScheduleDecisionTrace[];
   metadata: ScheduleMetadata;
+}
+
+export interface ScheduleSimplificationComparison {
+  current: ScheduleResult;
+  simpler: ScheduleResult;
+  currentWindowCount: number;
+  simplerWindowCount: number;
+  canSimplify: boolean;
+  message: string;
 }
 
 export interface GeneratedScheduleView {
@@ -1765,6 +1799,177 @@ export function generateAdaptiveSchedule(
     ),
   };
   return { context, schedule, items, availability };
+}
+
+function addIsoDays(localDate: string, days: number): string {
+  const date = new Date(`${localDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function supplementDisplayName(item: SupplementEntry): string {
+  return (
+    item.userLabel ??
+    SUPPLEMENT_CATALOG.find((entry) => entry.id === item.supplementId)?.displayName ??
+    item.supplementId
+  );
+}
+
+export function assessScheduleQuality(result: ScheduleResult): ScheduleQualitySummary {
+  const supplementItems = result.items.filter((item) => item.kind === "supplement");
+  const supplementWindowCount = new Set(
+    supplementItems
+      .map((item) => item.time?.minuteOfDay)
+      .filter((time): time is number => time !== undefined),
+  ).size;
+  const blockingConflictCount = result.conflicts.filter(
+    (conflict) => conflict.severity === "blocking",
+  ).length;
+  const preferenceConflictCount = result.conflicts.filter(
+    (conflict) => conflict.kind === "preference_conflict",
+  ).length;
+  const flexibleSupplementCount = supplementItems.filter(
+    (item) => item.timingState === "flexible",
+  ).length;
+  const complexity: ScheduleComplexity = blockingConflictCount
+    ? "needs_attention"
+    : supplementWindowCount >= 3 || preferenceConflictCount >= 3
+      ? "complex"
+      : supplementWindowCount >= 2 || preferenceConflictCount > 0
+        ? "moderate"
+        : "simple";
+  const message =
+    complexity === "needs_attention"
+      ? "Some supported timing constraints need attention before this schedule is complete."
+      : complexity === "complex"
+        ? "This schedule has several daily windows. A future simplification review may help."
+        : complexity === "moderate"
+          ? "This schedule has a few daily windows and some supported preferences to balance."
+          : "This schedule is compact and has no unresolved hard timing conflicts.";
+  return {
+    complexity,
+    supplementWindowCount,
+    blockingConflictCount,
+    preferenceConflictCount,
+    flexibleSupplementCount,
+    message,
+  };
+}
+
+function scheduleWindowCount(result: ScheduleResult): number {
+  return new Set(
+    result.items
+      .filter((item) => item.kind === "supplement")
+      .map((item) => item.time?.minuteOfDay)
+      .filter((time): time is number => time !== undefined),
+  ).size;
+}
+
+export function compareScheduleSimplification(
+  regimen: CanonicalRegimen,
+  knowledge: KnowledgeSnapshot,
+  options: SchedulerOptions = {},
+): ScheduleSimplificationComparison {
+  const current = generateSchedule(regimen, knowledge, options);
+  const simplerRegimen: CanonicalRegimen = {
+    ...regimen,
+    supplements: regimen.supplements.map((item) => {
+      const withoutPreferredTime = { ...item };
+      delete withoutPreferredTime.preferredTime;
+      return withoutPreferredTime;
+    }),
+  };
+  const simpler = generateSchedule(simplerRegimen, knowledge, options);
+  const currentWindowCount = scheduleWindowCount(current);
+  const simplerWindowCount = scheduleWindowCount(simpler);
+  const canSimplify =
+    current.status !== "incomplete" &&
+    simpler.status !== "incomplete" &&
+    simplerWindowCount < currentWindowCount;
+  return {
+    current,
+    simpler,
+    currentWindowCount,
+    simplerWindowCount,
+    canSimplify,
+    message: canSimplify
+      ? `A grouping-oriented schedule reduces supplement windows from ${currentWindowCount} to ${simplerWindowCount} without violating supported hard timing rules.`
+      : "No simpler valid schedule was found without changing the supported timing outcome.",
+  };
+}
+
+export function buildWeeklyReview(
+  regimen: CanonicalRegimen,
+  logs: DailyExecutionLog[],
+  weekStart: string,
+): WeeklyReviewSummary {
+  const weekEnd = addIsoDays(weekStart, 6);
+  const inWeek = logs
+    .filter((log) => log.localDate >= weekStart && log.localDate <= weekEnd)
+    .sort((a, b) => a.localDate.localeCompare(b.localDate));
+  const skippedByItem = new Map<StableId, number>();
+  const snoozedByItem = new Map<StableId, number>();
+  let supplementTakenCount = 0;
+  let supplementSkippedCount = 0;
+  let supplementSnoozedCount = 0;
+  let adjustmentCount = 0;
+  let medicationEventCount = 0;
+
+  for (const log of inWeek) {
+    const latest = latestExecutionEvents({
+      localDate: log.localDate,
+      now: { minuteOfDay: 0 },
+      events: log.events,
+    });
+    for (const event of latest.values()) {
+      if (event.kind === "supplement_taken") supplementTakenCount += 1;
+      if (event.kind === "supplement_skipped") {
+        supplementSkippedCount += 1;
+        skippedByItem.set(event.itemId, (skippedByItem.get(event.itemId) ?? 0) + 1);
+      }
+      if (event.kind === "supplement_snoozed") {
+        supplementSnoozedCount += 1;
+        snoozedByItem.set(event.itemId, (snoozedByItem.get(event.itemId) ?? 0) + 1);
+      }
+    }
+    for (const event of log.events) {
+      if (event.kind === "medication_taken") medicationEventCount += 1;
+      if (
+        event.kind === "wake_time_changed" ||
+        event.kind === "bedtime_changed" ||
+        event.kind === "meal_recorded" ||
+        event.kind === "meal_skipped" ||
+        event.kind === "beverage_recorded" ||
+        event.kind === "beverage_skipped"
+      ) {
+        adjustmentCount += 1;
+      }
+    }
+  }
+
+  const topItem = (counts: Map<StableId, number>) => {
+    const entry = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    if (!entry) return undefined;
+    const item = regimen.supplements.find((candidate) => candidate.id === entry[0]);
+    if (!item) return undefined;
+    return { itemId: item.id, displayName: supplementDisplayName(item), count: entry[1] };
+  };
+  const executionDenominator = supplementTakenCount + supplementSkippedCount;
+  const mostSkippedItem = topItem(skippedByItem);
+  const mostSnoozedItem = topItem(snoozedByItem);
+  return {
+    weekStart,
+    weekEnd,
+    daysWithActivity: inWeek.filter((log) => log.events.length > 0).length,
+    supplementTakenCount,
+    supplementSkippedCount,
+    supplementSnoozedCount,
+    adjustmentCount,
+    medicationEventCount,
+    executionRate: executionDenominator > 0 ? supplementTakenCount / executionDenominator : null,
+    ...(mostSkippedItem ? { mostSkippedItem } : {}),
+    ...(mostSnoozedItem ? { mostSnoozedItem } : {}),
+  };
 }
 
 export function explainScheduleItem(

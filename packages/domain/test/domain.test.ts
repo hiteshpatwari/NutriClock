@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessScheduleQuality,
+  buildWeeklyReview,
+  compareScheduleSimplification,
   generateSchedule,
   generateAdaptiveSchedule,
   loadKnowledgeSnapshot,
@@ -476,5 +479,71 @@ describe("deterministic scheduler", () => {
     expect(validNow.availability.find((entry) => entry.itemId === "iron-1")?.status).toBe(
       "available_now",
     );
+  });
+
+  it("summarizes schedule complexity without implying medical quality", () => {
+    const result = generateSchedule(
+      regimen([
+        supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(8) }),
+        supplement({ id: id("c-1"), supplementId: "vitamin_c", preferredTime: t(10) }),
+        supplement({ id: id("d-1"), supplementId: "vitamin_d3", preferredTime: t(12) }),
+        supplement({ id: id("mg-1"), supplementId: "magnesium", preferredTime: t(14) }),
+      ]),
+      loadKnowledgeSnapshot(),
+    );
+    const quality = assessScheduleQuality(result);
+    expect(quality.complexity).toBe("complex");
+    expect(quality.supplementWindowCount).toBeGreaterThanOrEqual(3);
+    expect(quality.message).toContain("daily windows");
+  });
+
+  it("builds an execution-only weekly review from the latest daily states", () => {
+    const input = regimen([supplement({ id: id("iron-1"), supplementId: "iron" })]);
+    const review = buildWeeklyReview(
+      input,
+      [
+        {
+          localDate: "2026-09-08",
+          events: [
+            { id: "skip", kind: "supplement_skipped", itemId: "iron-1", time: t(10) },
+            {
+              id: "snooze",
+              kind: "supplement_snoozed",
+              itemId: "iron-1",
+              time: t(10),
+              until: t(11),
+            },
+            { id: "taken", kind: "supplement_taken", itemId: "iron-1", time: t(11) },
+            { id: "meal", kind: "meal_recorded", mealName: "breakfast", time: t(8) },
+          ],
+        },
+        {
+          localDate: "2026-09-09",
+          events: [{ id: "skip-2", kind: "supplement_skipped", itemId: "iron-1", time: t(10) }],
+        },
+      ],
+      "2026-09-07",
+    );
+    expect(review.weekEnd).toBe("2026-09-13");
+    expect(review.daysWithActivity).toBe(2);
+    expect(review.supplementTakenCount).toBe(1);
+    expect(review.supplementSkippedCount).toBe(1);
+    expect(review.supplementSnoozedCount).toBe(0);
+    expect(review.adjustmentCount).toBe(1);
+    expect(review.executionRate).toBe(0.5);
+    expect(review.mostSkippedItem).toMatchObject({ itemId: "iron-1", count: 1 });
+  });
+
+  it("compares a simpler grouping variant without changing the canonical regimen", () => {
+    const input = regimen([
+      supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(8) }),
+      supplement({ id: id("c-1"), supplementId: "vitamin_c", preferredTime: t(10) }),
+      supplement({ id: id("d-1"), supplementId: "vitamin_d3", preferredTime: t(12) }),
+    ]);
+    const comparison = compareScheduleSimplification(input, loadKnowledgeSnapshot());
+    expect(comparison.current.status).not.toBe("incomplete");
+    expect(comparison.simpler.status).not.toBe("incomplete");
+    expect(comparison.simplerWindowCount).toBeLessThanOrEqual(comparison.currentWindowCount);
+    expect(input.supplements.every((item) => item.preferredTime)).toBe(true);
   });
 });

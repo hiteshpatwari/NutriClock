@@ -24,6 +24,9 @@ export default function Welcome() {
       <Link href="/today" style={styles.link}>
         Open Today
       </Link>
+      <Link href="/review" style={styles.link}>
+        Weekly review
+      </Link>
       <Text style={styles.muted}>Stored on this device. No account required.</Text>
     </ScrollView>
   );

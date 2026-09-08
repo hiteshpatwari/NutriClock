@@ -395,6 +395,43 @@ select:focus-visible {
   margin-top: 6px;
   margin-bottom: 10px;
 }
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+.review-stat,
+.quality-card {
+  padding: 16px;
+  border: 1px solid #d7ddd2;
+  border-radius: 12px;
+  background: #fff;
+}
+.review-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.review-stat strong {
+  color: #175f52;
+  font-size: 1.6rem;
+}
+.review-stat span,
+.quality-card p {
+  color: #62756c;
+  font-size: 0.9rem;
+}
+.quality-card {
+  margin: 22px 0;
+  background: #f1f7f3;
+  border-color: #b4d0bf;
+}
+.quality-card h2 {
+  margin: 0 0 8px;
+  color: #173f38;
+  text-transform: capitalize;
+}
 .source a + a {
   margin-left: 12px;
 }

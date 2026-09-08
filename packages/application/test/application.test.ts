@@ -93,5 +93,10 @@ describe("application orchestration", () => {
     };
     expect(persisted.regimen).toEqual(emptyRegimen);
     expect(persisted.dailyLogs?.[0]?.localDate).toBe("2026-09-08");
+    expect(app.getWeeklyReview("2026-09-07")).toMatchObject({
+      weekStart: "2026-09-07",
+      daysWithActivity: 1,
+    });
+    expect(app.getScheduleQuality()?.complexity).toBe("simple");
   });
 });

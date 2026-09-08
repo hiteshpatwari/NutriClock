@@ -1,5 +1,8 @@
 import {
   canonicalizeRegimen,
+  assessScheduleQuality,
+  buildWeeklyReview,
+  compareScheduleSimplification,
   generateAdaptiveSchedule,
   generateSchedule,
   loadKnowledgeSnapshot,
@@ -10,8 +13,11 @@ import {
   type DailyExecutionLog,
   type GeneratedScheduleView,
   type KnowledgeSnapshot,
+  type ScheduleQualitySummary,
+  type ScheduleSimplificationComparison,
   type ScheduleResult,
   type UserOverride,
+  type WeeklyReviewSummary,
 } from "@nutriclock/domain";
 import { createEmptyState, type RegimenRepository } from "@nutriclock/persistence";
 import type { PersistedNutriClockState } from "@nutriclock/domain";
@@ -40,6 +46,9 @@ export interface NutriClockApplication {
     now: DayContext["now"],
     event: DayEvent,
   ): Promise<AdaptiveScheduleResult | null>;
+  getScheduleQuality(): ScheduleQualitySummary | null;
+  getScheduleSimplification(): ScheduleSimplificationComparison | null;
+  getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
   clear(): Promise<void>;
 }
 
@@ -219,6 +228,18 @@ export function createNutriClockApplication(
         };
         return null;
       }
+    },
+    getScheduleQuality() {
+      if (!current.regimen) return null;
+      return assessScheduleQuality(generateSchedule(current.regimen, knowledge));
+    },
+    getScheduleSimplification() {
+      if (!current.regimen) return null;
+      return compareScheduleSimplification(current.regimen, knowledge);
+    },
+    getWeeklyReview(weekStart) {
+      if (!current.regimen) return null;
+      return buildWeeklyReview(current.regimen, current.dailyLogs, weekStart);
     },
     generate,
     async clear() {

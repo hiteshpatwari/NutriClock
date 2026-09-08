@@ -228,6 +228,9 @@ export default function Today() {
         <Link href="/schedule" style={styles.link}>
           View full schedule explanations
         </Link>
+        <Link href="/review" style={styles.link}>
+          Weekly review
+        </Link>
       </View>
     </ScrollView>
   );

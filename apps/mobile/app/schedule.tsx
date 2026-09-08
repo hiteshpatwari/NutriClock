@@ -94,6 +94,9 @@ export default function Schedule() {
         <Link href="/today" style={styles.link}>
           Open Today
         </Link>
+        <Link href="/review" style={styles.link}>
+          Weekly review
+        </Link>
         <Link href="/settings" style={styles.link}>
           Settings / delete local data
         </Link>

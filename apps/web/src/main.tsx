@@ -40,6 +40,12 @@ const localDateKey = (date = new Date()) =>
 const localNow = (date = new Date()): LocalTime => ({
   minuteOfDay: date.getHours() * 60 + date.getMinutes(),
 });
+const weekStartKey = (date = new Date()) => {
+  const monday = new Date(date);
+  const daysSinceMonday = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - daysSinceMonday);
+  return localDateKey(monday);
+};
 const addMinutes = (value: LocalTime, minutes: number): LocalTime => ({
   minuteOfDay: Math.min(1439, value.minuteOfDay + minutes),
 });
@@ -95,6 +101,7 @@ function Layout() {
           </Link>
           <nav aria-label="Primary">
             <Link to="/today">Today</Link>
+            <Link to="/review">Review</Link>
             <Link to="/day">Your Day</Link>
             <Link to="/supplements">Supplements</Link>
             <Link to="/medications">Medications</Link>
@@ -116,6 +123,7 @@ function Layout() {
         <Routes>
           <Route path="/" element={<Welcome onStart={() => navigate("/day")} />} />
           <Route path="/today" element={<TodayPage app={app} />} />
+          <Route path="/review" element={<ReviewPage app={app} />} />
           <Route
             path="/day"
             element={
@@ -413,6 +421,122 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         Schedule remains derived from the current regimen and approved rules. Daily activity is
         stored locally on this device.
       </p>
+    </section>
+  );
+}
+
+function ReviewPage({ app }: { app: NutriClockApplication }) {
+  const [, setRevision] = useState(0);
+  const weekStart = weekStartKey();
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1);
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(interval);
+  }, [app, weekStart]);
+  if (!app.state.regimen) {
+    return (
+      <section className="card">
+        <p className="eyebrow">WEEKLY REVIEW</p>
+        <h1>Build your NutriClock first</h1>
+        <p className="helper">
+          Your local execution review will appear after you create a regimen.
+        </p>
+        <Link to="/day">Start with Your Day</Link>
+      </section>
+    );
+  }
+  const review = app.getWeeklyReview(weekStart);
+  const quality = app.getScheduleQuality();
+  const simplification = app.getScheduleSimplification();
+  return (
+    <section className="card review-page">
+      <div className="resulthead">
+        <div>
+          <p className="eyebrow">WEEKLY REVIEW</p>
+          <h1>Your NutriClock week</h1>
+        </div>
+        <span className="today-date">
+          {review?.weekStart} to {review?.weekEnd}
+        </span>
+      </div>
+      <p className="helper">
+        This is an execution summary from activity stored on this device. It does not measure
+        nutrient absorption or health outcomes.
+      </p>
+      <div className="review-grid">
+        <div className="review-stat">
+          <strong>
+            {review?.executionRate === null
+              ? "—"
+              : `${Math.round((review?.executionRate ?? 0) * 100)}%`}
+          </strong>
+          <span>marked taken among taken/skipped doses</span>
+        </div>
+        <div className="review-stat">
+          <strong>{review?.daysWithActivity ?? 0}</strong>
+          <span>days with recorded activity</span>
+        </div>
+        <div className="review-stat">
+          <strong>{review?.supplementSnoozedCount ?? 0}</strong>
+          <span>latest supplement states snoozed</span>
+        </div>
+        <div className="review-stat">
+          <strong>{review?.adjustmentCount ?? 0}</strong>
+          <span>routine adjustments recorded</span>
+        </div>
+      </div>
+      {review?.mostSkippedItem && (
+        <p className="notice">
+          Most frequently skipped in this review period:{" "}
+          <strong>{review.mostSkippedItem.displayName}</strong> ({review.mostSkippedItem.count}).
+        </p>
+      )}
+      {review?.mostSnoozedItem && (
+        <p className="notice">
+          Most frequently snoozed in this review period:{" "}
+          <strong>{review.mostSnoozedItem.displayName}</strong> ({review.mostSnoozedItem.count}).
+        </p>
+      )}
+      {quality && (
+        <div className="quality-card">
+          <p className="eyebrow">SCHEDULE COMPLEXITY</p>
+          <h2>{quality.complexity.replace("_", " ")}</h2>
+          <p>{quality.message}</p>
+          <p className="metadata">
+            {quality.supplementWindowCount} supplement window
+            {quality.supplementWindowCount === 1 ? "" : "s"} · {quality.flexibleSupplementCount}{" "}
+            flexible item{quality.flexibleSupplementCount === 1 ? "" : "s"}
+          </p>
+        </div>
+      )}
+      {simplification?.canSimplify && (
+        <div className="simplification-card">
+          <p className="eyebrow">SIMPLIFICATION OPTION</p>
+          <h2>Fewer supplement windows may be possible</h2>
+          <p>{simplification.message}</p>
+          <details>
+            <summary>Preview the grouping-oriented times</summary>
+            <ul>
+              {simplification.simpler.items
+                .filter((item) => item.kind === "supplement" && item.time)
+                .map((item) => (
+                  <li key={item.id}>
+                    {item.displayName}: {item.time && formatLocalTime(item.time)}
+                  </li>
+                ))}
+            </ul>
+          </details>
+          <p className="metadata">
+            This is a comparison only. Your current schedule and preferences are unchanged.
+          </p>
+        </div>
+      )}
+      <p className="helper">
+        Use Today to record what happened and adapt the remaining day. NutriClock never changes
+        medication anchors or recommends doses.
+      </p>
+      <Link to="/today">Open Today</Link>
     </section>
   );
 }
