@@ -1,0 +1,47 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - link "NutriClock_" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=e6]:
+      - link "Your Day" [ref=e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e61]:
+    - paragraph [ref=e62]: STEP 03
+    - heading "Medications that affect timing — optional" [level=1] [ref=e63]
+    - paragraph [ref=e64]: Medication information is used only for timing rules NutriClock explicitly supports. Medication times are entered by you and never moved by the scheduler.
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - text: Supported medication
+        - combobox "Supported medication" [ref=e67]:
+          - option "Levothyroxine / Synthroid" [selected]
+          - option "Tetracycline antibiotic"
+          - option "Quinolone antibiotic"
+          - option "Oral bisphosphonate"
+          - option "Dolutegravir"
+          - option "Penicillamine"
+          - option "Proton-pump inhibitor"
+          - option "Metformin"
+          - option "Warfarin / selected anticoagulant"
+          - option "Methotrexate"
+          - option "Selected antiepileptic"
+          - option "Levodopa"
+      - generic [ref=e68]:
+        - text: Or enter another name (unsupported coverage)
+        - textbox "Or enter another name (unsupported coverage)" [ref=e69]:
+          - /placeholder: Optional medication name
+      - generic [ref=e70]:
+        - text: Existing administration time
+        - textbox "Existing administration time" [ref=e71]: 07:00
+    - button "Add medication anchor" [active] [ref=e72] [cursor=pointer]
+    - list [ref=e73]:
+      - listitem [ref=e75]:
+        - generic [ref=e76]: Levothyroxine / Synthroid · 7:00 AM · fixed
+    - button "Generate my NutriClock" [ref=e74] [cursor=pointer]

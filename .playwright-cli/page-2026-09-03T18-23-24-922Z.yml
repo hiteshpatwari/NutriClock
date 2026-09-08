@@ -1,0 +1,63 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - link "NutriClock_" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=f1e6]:
+      - link "Your Day" [ref=f1e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=f1e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=f1e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=f1e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=f1e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f1e36]:
+    - paragraph [ref=f1e37]: STEP 02
+    - heading "Your Supplements" [level=1] [ref=f1e38]
+    - paragraph [ref=f1e39]: Add only supplements you have already decided to take. NutriClock stores your dose; it does not judge or change it.
+    - generic [ref=f1e40]:
+      - generic [ref=f1e41]:
+        - text: Supplement
+        - combobox "Supplement" [ref=f1e42]:
+          - option "Iron" [selected]
+          - option "Vitamin C"
+          - option "Vitamin D3"
+          - option "Vitamin B12"
+          - option "Calcium"
+          - option "Magnesium"
+          - option "Zinc"
+          - option "Folate / folic acid"
+          - option "Omega-3"
+      - generic [ref=f1e43]:
+        - text: Form
+        - combobox "Form" [ref=f1e44]:
+          - option "Unspecified"
+          - option "Common oral iron" [selected]
+          - option "Calcium carbonate"
+          - option "Calcium citrate"
+      - generic [ref=f1e45]:
+        - text: Dose
+        - textbox "Dose" [active] [ref=f1e46]: "65"
+      - generic [ref=f1e47]:
+        - text: Unit
+        - combobox "Unit" [ref=f1e48]:
+          - option "mg" [selected]
+          - option "mcg"
+          - option "g"
+          - option "IU"
+          - option "mL"
+          - option "other"
+      - generic [ref=f1e49]:
+        - text: Dose basis
+        - combobox "Dose basis" [ref=f1e50]:
+          - option "Unknown"
+          - option "Elemental" [selected]
+          - option "Product label amount"
+      - generic [ref=f1e51]:
+        - text: Preferred time (optional)
+        - textbox "Preferred time (optional)" [ref=f1e52]
+    - button "Add supplement" [ref=f1e53] [cursor=pointer]
+    - list [ref=f1e54]
+    - button "Continue to medications" [ref=f1e56] [cursor=pointer]

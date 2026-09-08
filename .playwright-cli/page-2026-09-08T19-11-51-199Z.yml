@@ -1,0 +1,26 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - link "NutriClock_" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - navigation "Primary" [ref=e7]:
+        - link "Today" [active] [ref=e8] [cursor=pointer]:
+          - /url: /today
+        - link "Your Day" [ref=e9] [cursor=pointer]:
+          - /url: /day
+        - link "Supplements" [ref=e10] [cursor=pointer]:
+          - /url: /supplements
+        - link "Medications" [ref=e11] [cursor=pointer]:
+          - /url: /medications
+        - link "Your NutriClock" [ref=e12] [cursor=pointer]:
+          - /url: /schedule
+        - link "Settings" [ref=e13] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e22]:
+      - paragraph [ref=e23]: TODAY
+      - heading "Build your NutriClock first" [level=1] [ref=e24]
+      - paragraph [ref=e25]: Once your regimen is set up, Today will show what remains and help you adapt the rest of the day.
+      - link "Start with Your Day" [ref=e26] [cursor=pointer]:
+        - /url: /day

@@ -1,0 +1,46 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - link "NutriClock_" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=f1e6]:
+      - link "Your Day" [ref=f1e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=f1e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=f1e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=f1e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=f1e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=f1e76]:
+    - generic [ref=f1e77]:
+      - generic [ref=f1e78]:
+        - paragraph [ref=f1e79]: YOUR NUTRICLOCK
+        - heading "Suggested schedule" [level=1] [ref=f1e80]
+      - button "Regenerate" [ref=f1e81] [cursor=pointer]
+    - paragraph [ref=f1e82]: Suggested schedule based on the timing rules NutriClock currently supports. Medication times are entered by you.
+    - generic [ref=f1e83]:
+      - article [ref=f1e84]:
+        - generic [ref=f1e85]: 7:00 AM
+        - generic [ref=f1e86]:
+          - heading "Levothyroxine / Synthroid" [level=2] [ref=f1e87]
+          - paragraph [ref=f1e88]: Existing medication time · fixed
+          - group [ref=f1e89]:
+            - generic "Why this time?" [ref=f1e90] [cursor=pointer]
+      - article [ref=f1e91]:
+        - generic [ref=f1e92]: 11:00 AM
+        - generic [ref=f1e93]:
+          - heading "Iron" [level=2] [ref=f1e94]
+          - paragraph [ref=f1e95]: Suggested timing
+          - group [ref=f1e96]:
+            - generic "Why this time?" [active] [ref=f1e97] [cursor=pointer]
+            - list [ref=f1e99]:
+              - listitem [ref=f1e100]: Iron is usually absorbed better away from food. If taking it without food bothers your stomach, follow your label, pharmacist, or clinician's instructions.
+              - listitem [ref=f1e101]: Keep iron at least 4 hours away from your levothyroxine time.
+            - paragraph [ref=f1e102]:
+              - text: "Sources:"
+              - generic [ref=f1e103]: ev_medlineplus_levothyroxine
+              - generic [ref=f1e104]: ev_nhs_ferrous_sulfate
+              - generic [ref=f1e105]: ev_nih_iron_hp
+    - paragraph [ref=f1e98]: Ruleset 1.0.0-draft · Evidence registry 2026-09-03 · Algorithm greedy-repair-v1

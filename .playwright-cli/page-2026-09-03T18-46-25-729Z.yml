@@ -1,0 +1,66 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - link "NutriClock_" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=e6]:
+      - link "Your Day" [ref=e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e37]:
+    - paragraph [ref=e38]: STEP 02
+    - heading "Your Supplements" [level=1] [ref=e39]
+    - paragraph [ref=e40]: Add only supplements you have already decided to take. NutriClock stores your dose; it does not judge or change it.
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - text: Supplement
+        - combobox "Supplement" [ref=e43]:
+          - option "Iron" [selected]
+          - option "Vitamin C"
+          - option "Vitamin D3"
+          - option "Vitamin B12"
+          - option "Calcium"
+          - option "Magnesium"
+          - option "Zinc"
+          - option "Folate / folic acid"
+          - option "Omega-3"
+      - generic [ref=e44]:
+        - text: Form
+        - combobox "Form" [ref=e45]:
+          - option "Unspecified"
+          - option "Common oral iron" [selected]
+          - option "Calcium carbonate"
+          - option "Calcium citrate"
+      - generic [ref=e46]:
+        - text: Dose
+        - textbox "Dose" [ref=e47]: "65"
+      - generic [ref=e48]:
+        - text: Unit
+        - combobox "Unit" [ref=e49]:
+          - option "mg" [selected]
+          - option "mcg"
+          - option "g"
+          - option "IU"
+          - option "mL"
+          - option "other"
+      - generic [ref=e50]:
+        - text: Dose basis
+        - combobox "Dose basis" [ref=e51]:
+          - option "Unknown" [selected]
+          - option "Elemental"
+          - option "Product label amount"
+      - generic [ref=e52]:
+        - text: Preferred time (optional)
+        - textbox "Preferred time (optional)" [ref=e53]
+    - button "Add supplement" [active] [ref=e54] [cursor=pointer]
+    - list [ref=e55]:
+      - listitem [ref=e58]:
+        - generic [ref=e59]: Iron · 65 mg
+        - button "Remove" [ref=e60] [cursor=pointer]
+    - button "Continue to medications" [ref=e57] [cursor=pointer]

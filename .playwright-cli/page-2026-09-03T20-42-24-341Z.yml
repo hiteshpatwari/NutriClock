@@ -1,0 +1,48 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - link "NutriClock_" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - navigation "Primary" [ref=e7]:
+        - link "Your Day" [ref=e8] [cursor=pointer]:
+          - /url: /day
+        - link "Supplements" [ref=e9] [cursor=pointer]:
+          - /url: /supplements
+        - link "Medications" [ref=e10] [cursor=pointer]:
+          - /url: /medications
+        - link "Your NutriClock" [ref=e11] [cursor=pointer]:
+          - /url: /schedule
+        - link "Settings" [ref=e12] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e68]:
+      - paragraph [ref=e69]: STEP 03
+      - heading "Medications that affect timing — optional" [level=1] [ref=e70]
+      - paragraph [ref=e71]: Medication information is used only for timing rules NutriClock explicitly supports. Medication times are entered by you and never moved by the scheduler.
+      - generic [ref=e72]:
+        - generic [ref=e73]:
+          - text: Supported medication
+          - combobox "Supported medication" [ref=e74]:
+            - option "Levothyroxine / Synthroid" [selected]
+            - option "Tetracycline antibiotic"
+            - option "Quinolone antibiotic"
+            - option "Oral bisphosphonate"
+            - option "Dolutegravir"
+            - option "Penicillamine"
+            - option "Proton-pump inhibitor"
+            - option "Metformin"
+            - option "Warfarin / selected anticoagulant"
+            - option "Methotrexate"
+            - option "Selected antiepileptic"
+            - option "Levodopa"
+        - generic [ref=e75]:
+          - text: Or enter another name (unsupported coverage)
+          - textbox "Or enter another name (unsupported coverage)" [ref=e76]:
+            - /placeholder: Optional medication name
+        - generic [ref=e77]:
+          - text: Existing administration time
+          - textbox "Existing administration time" [ref=e78]: 07:00
+      - button "Add medication anchor" [ref=e79] [cursor=pointer]
+      - list [ref=e80]
+      - button "Generate my NutriClock" [ref=e81] [cursor=pointer]

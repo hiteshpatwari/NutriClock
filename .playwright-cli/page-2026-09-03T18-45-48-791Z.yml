@@ -1,0 +1,26 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - link "NutriClock_" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=e6]:
+      - link "Your Day" [ref=e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: YOUR NUTRICLOCK
+        - heading "Suggested schedule" [level=1] [ref=e16]
+      - button "Regenerate" [ref=e17] [cursor=pointer]
+    - paragraph [ref=e18]: Suggested schedule based on the timing rules NutriClock currently supports. Medication times are entered by you.
+    - paragraph [ref=e19]:
+      - text: No schedule yet.
+      - link "Start with Your Day" [ref=e20] [cursor=pointer]:
+        - /url: /day

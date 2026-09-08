@@ -1,0 +1,39 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - link "NutriClock_" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - navigation "Primary" [ref=e7]:
+        - link "Your Day" [ref=e8] [cursor=pointer]:
+          - /url: /day
+        - link "Supplements" [ref=e9] [cursor=pointer]:
+          - /url: /supplements
+        - link "Medications" [ref=e10] [cursor=pointer]:
+          - /url: /medications
+        - link "Your NutriClock" [ref=e11] [cursor=pointer]:
+          - /url: /schedule
+        - link "Settings" [ref=e12] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e21]:
+      - paragraph [ref=e22]: STEP 01
+      - heading "Your Day" [level=1] [ref=e23]
+      - paragraph [ref=e24]: Set the shape of a normal day. Meal composition is used only when you explicitly mark it.
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - text: Wake time
+          - textbox "Wake time" [ref=e27]: 07:00
+        - generic [ref=e28]:
+          - text: Bedtime
+          - textbox "Bedtime" [ref=e29]: 23:00
+        - generic [ref=e30]:
+          - text: Breakfast (optional)
+          - textbox "Breakfast (optional)" [ref=e31]
+        - generic [ref=e32]:
+          - text: Coffee (optional)
+          - textbox "Coffee (optional)" [ref=e33]
+        - generic [ref=e34]:
+          - text: Tea (optional)
+          - textbox "Tea (optional)" [ref=e35]
+      - button "Continue to supplements" [ref=e36] [cursor=pointer]

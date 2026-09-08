@@ -1,0 +1,29 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - link "NutriClock_" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - navigation "Primary" [ref=e7]:
+        - link "Today" [ref=e8] [cursor=pointer]:
+          - /url: /today
+        - link "Your Day" [ref=e9] [cursor=pointer]:
+          - /url: /day
+        - link "Supplements" [ref=e10] [cursor=pointer]:
+          - /url: /supplements
+        - link "Medications" [ref=e11] [cursor=pointer]:
+          - /url: /medications
+        - link "Your NutriClock" [ref=e12] [cursor=pointer]:
+          - /url: /schedule
+        - link "Settings" [ref=e13] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: LOCAL-FIRST / RULES V1
+      - heading "A smarter schedule for the supplements you already take." [level=1] [ref=e16]
+      - paragraph [ref=e17]: Organize supplements around meals, coffee, and supported interactions — with the evidence behind every timing suggestion.
+      - paragraph [ref=e18]:
+        - strong [ref=e19]: NutriClock helps organize supplements you already take.
+        - text: It does not diagnose conditions or determine which supplements or doses you need.
+      - button "Build my NutriClock" [ref=e20] [cursor=pointer]
+      - paragraph [ref=e21]: Stored on this device. No account required.

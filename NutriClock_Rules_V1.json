@@ -1,0 +1,769 @@
+{
+  "product": "NutriClock",
+  "documentStatus": "draft_for_product_and_rules_review",
+  "rulesetVersion": "1.0.0-draft",
+  "evidenceRegistryVersion": "2026-09-03",
+  "reviewedAt": "2026-09-03",
+  "policy": {
+    "runtimeMedicalResearchAllowed": false,
+    "llmMedicalInferenceAllowed": false,
+    "inactiveStatuses": [
+      "RULE_REVIEW_REQUIRED",
+      "retired"
+    ],
+    "notes": [
+      "Only rules with status='active' may affect scheduling, warnings, or user-facing medical explanations.",
+      "Review-required rules are intentionally inert until product/rules approval resolves the documented ambiguity.",
+      "Clinical-warning and informational rules must not affect scheduler scoring unless a separate active scheduling rule exists.",
+      "Hard schedule constraints are non-overridable.",
+      "Medication times are immutable user-entered anchors."
+    ]
+  },
+  "evidence": [
+    {
+      "id": "ev_nih_iron_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Iron — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Interactions with Medications; iron absorption context"
+    },
+    {
+      "id": "ev_nih_vitamin_c_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Vitamin C — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminC-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Introduction; Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_vitamin_d_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Vitamin D — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Absorption; Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_vitamin_b12_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Vitamin B12 — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/VitaminB12-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_calcium_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Calcium — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Dietary Supplements; Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_magnesium_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Magnesium — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Magnesium-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_zinc_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Zinc — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Zinc-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Supplement interactions; Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_folate_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Folate — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Folate-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Interactions with Medications"
+    },
+    {
+      "id": "ev_nih_omega3_hp",
+      "organization": "NIH Office of Dietary Supplements",
+      "title": "Omega-3 Fatty Acids — Health Professional Fact Sheet",
+      "url": "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Interactions with Medications — Warfarin and similar anticoagulants"
+    },
+    {
+      "id": "ev_nhs_ferrous_sulfate",
+      "organization": "NHS",
+      "title": "How and when to take ferrous sulfate",
+      "url": "https://www.nhs.uk/medicines/ferrous-sulfate/how-and-when-to-take-ferrous-sulfate/",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "How to take it"
+    },
+    {
+      "id": "ev_medlineplus_levothyroxine",
+      "organization": "MedlinePlus / U.S. National Library of Medicine",
+      "title": "Levothyroxine: Drug Information",
+      "url": "https://medlineplus.gov/druginfo/meds/a682461.html",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Special precautions — calcium carbonate and ferrous sulfate"
+    },
+    {
+      "id": "ev_medlineplus_iron_use",
+      "organization": "MedlinePlus / U.S. National Library of Medicine",
+      "title": "Taking iron supplements",
+      "url": "https://medlineplus.gov/ency/article/007478.htm",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Administration with calcium, milk, caffeine, medications"
+    },
+    {
+      "id": "ev_medlineplus_penicillamine",
+      "organization": "MedlinePlus / U.S. National Library of Medicine",
+      "title": "Penicillamine: Drug Information",
+      "url": "https://medlineplus.gov/druginfo/meds/a618021.html",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Special precautions — iron and zinc-containing products"
+    },
+    {
+      "id": "ev_medlineplus_tetracycline",
+      "organization": "MedlinePlus / U.S. National Library of Medicine",
+      "title": "Tetracycline: Drug Information",
+      "url": "https://medlineplus.gov/druginfo/meds/a682098.html",
+      "reviewedAt": "2026-09-03",
+      "sourceRevision": "Special precautions — calcium, zinc, magnesium, and iron"
+    }
+  ],
+  "rules": [
+    {
+      "id": "iron_common_oral_meal_timing",
+      "sourceId": "iron",
+      "targetId": "routine:meal",
+      "classification": "strong_preference",
+      "effect": "prefer_empty_stomach",
+      "direction": "asymmetric",
+      "rationale": "NHS guidance for ferrous sulfate states it works best on an empty stomach, approximately 30 minutes before food or 2 hours after food; food is acceptable if stomach upset occurs.",
+      "userMessage": "Iron is usually absorbed better away from food. If taking it without food bothers your stomach, follow your label, pharmacist, or clinician's instructions.",
+      "evidenceIds": [
+        "ev_nhs_ferrous_sulfate"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "sourceBeforeTargetMinutes": 30,
+      "targetBeforeSourceMinutes": 120,
+      "conditions": [
+        {
+          "type": "supplement_form_is",
+          "supplementId": "iron",
+          "formId": "iron_oral_common"
+        }
+      ]
+    },
+    {
+      "id": "iron_vitamin_c_together",
+      "sourceId": "iron",
+      "targetId": "vitamin_c",
+      "classification": "strong_preference",
+      "effect": "prefer_together",
+      "direction": "symmetric",
+      "rationale": "Vitamin C can improve nonheme iron absorption, and NHS guidance notes that a clinician or pharmacist may recommend vitamin C with ferrous sulfate.",
+      "userMessage": "Vitamin C is paired with iron because vitamin C can support nonheme iron absorption.",
+      "evidenceIds": [
+        "ev_nhs_ferrous_sulfate",
+        "ev_nih_vitamin_c_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "iron_levothyroxine_240",
+      "sourceId": "iron",
+      "targetId": "levothyroxine",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "symmetric",
+      "rationale": "Authoritative drug guidance advises at least four hours between levothyroxine and ferrous sulfate/iron.",
+      "userMessage": "Keep iron at least 4 hours away from your levothyroxine time.",
+      "evidenceIds": [
+        "ev_nih_iron_hp",
+        "ev_medlineplus_levothyroxine"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "minimumSeparationMinutes": 240
+    },
+    {
+      "id": "iron_ppi_warning",
+      "sourceId": "iron",
+      "targetId": "proton_pump_inhibitor",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Proton-pump inhibitors reduce gastric acidity and can reduce nonheme iron absorption; authoritative sources do not establish a universal timing interval that solves this issue.",
+      "userMessage": "A proton-pump inhibitor may affect iron absorption. NutriClock will not invent a separation interval; follow your pharmacist or clinician's guidance.",
+      "evidenceIds": [
+        "ev_nih_iron_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "iron_levodopa_warning",
+      "sourceId": "iron",
+      "targetId": "levodopa",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Iron can reduce levodopa absorption/availability, but the approved V1 evidence does not establish one universal supplement scheduling interval for NutriClock to enforce.",
+      "userMessage": "Iron may interact with levodopa. NutriClock will not change either regimen; check your prescription instructions or pharmacist guidance.",
+      "evidenceIds": [
+        "ev_nih_iron_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "vitamin_d3_fat_meal",
+      "sourceId": "vitamin_d3",
+      "targetId": "routine:meal",
+      "classification": "strong_preference",
+      "effect": "prefer_meal_characteristic",
+      "direction": "symmetric",
+      "rationale": "The concurrent presence of dietary fat enhances vitamin D absorption, although vitamin D is still absorbed without dietary fat.",
+      "userMessage": "When practical, Vitamin D3 is placed with a meal you marked as containing dietary fat.",
+      "evidenceIds": [
+        "ev_nih_vitamin_d_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "conditions": [
+        {
+          "type": "meal_contains_dietary_fat",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "vitamin_b12_ppi_warning",
+      "sourceId": "vitamin_b12",
+      "targetId": "proton_pump_inhibitor",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Gastric acid inhibitors can interfere with absorption of food-bound vitamin B12; no universal timing interval is established in the approved source.",
+      "userMessage": "Proton-pump inhibitors can affect vitamin B12 status. NutriClock does not treat this as a timing problem.",
+      "evidenceIds": [
+        "ev_nih_vitamin_b12_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "vitamin_b12_metformin_warning",
+      "sourceId": "vitamin_b12",
+      "targetId": "metformin",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Metformin may reduce vitamin B12 absorption and serum vitamin B12 concentrations; this is not solved by an invented dose-separation interval.",
+      "userMessage": "Metformin can affect vitamin B12 status. NutriClock does not change either regimen or invent a separation interval.",
+      "evidenceIds": [
+        "ev_nih_vitamin_b12_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "calcium_carbonate_with_food",
+      "sourceId": "calcium",
+      "targetId": "routine:meal",
+      "classification": "strong_preference",
+      "effect": "prefer_with_food",
+      "direction": "symmetric",
+      "rationale": "Calcium carbonate absorption is more dependent on stomach acid and is improved when taken with a meal.",
+      "userMessage": "Calcium carbonate is placed with food when practical.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "conditions": [
+        {
+          "type": "supplement_form_is",
+          "supplementId": "calcium",
+          "formId": "calcium_carbonate"
+        }
+      ]
+    },
+    {
+      "id": "calcium_over_500mg_information",
+      "sourceId": "calcium",
+      "targetId": "calcium",
+      "classification": "informational",
+      "effect": "informational",
+      "direction": "symmetric",
+      "rationale": "NIH notes that the percentage of calcium absorbed from supplements is highest with doses of 500 mg or less at one time. NutriClock must not split or change the entered dose.",
+      "userMessage": "Calcium absorption percentage tends to be higher at 500 mg or less at one time. NutriClock will not change your dose; ask a clinician or pharmacist if you have questions about splitting it.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "conditions": [
+        {
+          "type": "dose_at_least",
+          "supplementId": "calcium",
+          "amount": 500.000001,
+          "unit": "mg",
+          "basis": "elemental"
+        }
+      ]
+    },
+    {
+      "id": "calcium_carbonate_levothyroxine_240",
+      "sourceId": "calcium",
+      "targetId": "levothyroxine",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "symmetric",
+      "rationale": "Calcium carbonate can interfere with levothyroxine absorption; authoritative guidance instructs at least four hours of separation.",
+      "userMessage": "Keep calcium carbonate at least 4 hours away from your levothyroxine time.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp",
+        "ev_medlineplus_levothyroxine"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "minimumSeparationMinutes": 240,
+      "conditions": [
+        {
+          "type": "supplement_form_is",
+          "supplementId": "calcium",
+          "formId": "calcium_carbonate"
+        }
+      ]
+    },
+    {
+      "id": "calcium_quinolone_120",
+      "sourceId": "calcium",
+      "targetId": "quinolone_antibiotic",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "symmetric",
+      "rationale": "NIH guidance states that taking a quinolone antibiotic 2 hours before or 2 hours after calcium supplements prevents the documented absorption effect.",
+      "userMessage": "Keep calcium at least 2 hours away from this quinolone antibiotic time.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "minimumSeparationMinutes": 120
+    },
+    {
+      "id": "dolutegravir_calcium_asymmetric",
+      "sourceId": "dolutegravir",
+      "targetId": "calcium",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "asymmetric",
+      "rationale": "FDA-label-derived guidance summarized by NIH advises dolutegravir 2 hours before or 6 hours after calcium supplements.",
+      "userMessage": "Calcium must be scheduled around your fixed dolutegravir time using the supported 2-hour-before / 6-hour-after rule.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "sourceBeforeTargetMinutes": 120,
+      "targetBeforeSourceMinutes": 360
+    },
+    {
+      "id": "magnesium_oral_bisphosphonate_120",
+      "sourceId": "magnesium",
+      "targetId": "oral_bisphosphonate",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "symmetric",
+      "rationale": "NIH guidance recommends at least 2 hours between magnesium-rich supplements/medications and oral bisphosphonates.",
+      "userMessage": "Keep magnesium at least 2 hours away from this oral bisphosphonate time.",
+      "evidenceIds": [
+        "ev_nih_magnesium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "minimumSeparationMinutes": 120
+    },
+    {
+      "id": "magnesium_ppi_warning",
+      "sourceId": "magnesium",
+      "targetId": "proton_pump_inhibitor",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Long-term PPI use can cause low magnesium in some people; an arbitrary supplement timing interval does not resolve this issue.",
+      "userMessage": "Long-term proton-pump inhibitor use can affect magnesium status. NutriClock does not treat this as a timing problem.",
+      "evidenceIds": [
+        "ev_nih_magnesium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "zinc_penicillamine_60",
+      "sourceId": "zinc",
+      "targetId": "penicillamine",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "symmetric",
+      "rationale": "Authoritative guidance recommends at least one hour between zinc supplements and penicillamine.",
+      "userMessage": "Keep zinc at least 1 hour away from your penicillamine time.",
+      "evidenceIds": [
+        "ev_nih_zinc_hp",
+        "ev_medlineplus_penicillamine"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active",
+      "minimumSeparationMinutes": 60
+    },
+    {
+      "id": "folate_methotrexate_warning",
+      "sourceId": "folate",
+      "targetId": "methotrexate",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "The relationship between folate and methotrexate depends on clinical context and cannot safely be reduced to a universal timing rule.",
+      "userMessage": "Clinical review recommended: folate use with methotrexate depends on why methotrexate was prescribed. NutriClock will not change either regimen.",
+      "evidenceIds": [
+        "ev_nih_folate_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "folate_antiepileptic_warning",
+      "sourceId": "folate",
+      "targetId": "selected_antiepileptic",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Certain antiepileptic medicines can affect folate status, and folate supplements can affect serum levels of some antiepileptic medicines.",
+      "userMessage": "Folate can have clinically important interactions with some antiepileptic medicines. NutriClock will not try to solve this by moving a dose.",
+      "evidenceIds": [
+        "ev_nih_folate_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "omega3_anticoagulant_warning",
+      "sourceId": "omega_3",
+      "targetId": "warfarin_selected_anticoagulant",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Omega-3/fish-oil products can have antiplatelet effects, and patients using anticoagulants may require monitoring; timing separation does not remove the clinical issue.",
+      "userMessage": "Omega-3 with warfarin or similar anticoagulants may require monitoring. NutriClock will not invent a separation interval.",
+      "evidenceIds": [
+        "ev_nih_omega3_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "active"
+    },
+    {
+      "id": "iron_coffee_120_symmetric",
+      "sourceId": "iron",
+      "targetId": "routine:coffee",
+      "classification": "strong_preference",
+      "effect": "prefer_separation",
+      "direction": "symmetric",
+      "rationale": "The product specification proposes a 120-minute symmetric coffee separation. NHS clearly supports a two-hour gap after iron before coffee, while MedlinePlus advises avoiding caffeine at the same time; the reviewed sources do not cleanly establish the same exact 120-minute interval in both directions.",
+      "userMessage": "Prefer keeping iron about 2 hours away from coffee.",
+      "evidenceIds": [
+        "ev_nhs_ferrous_sulfate",
+        "ev_medlineplus_iron_use"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "minimumSeparationMinutes": 120
+    },
+    {
+      "id": "iron_tea_120_symmetric",
+      "sourceId": "iron",
+      "targetId": "routine:tea",
+      "classification": "strong_preference",
+      "effect": "prefer_separation",
+      "direction": "symmetric",
+      "rationale": "The product specification proposes a 120-minute symmetric tea separation. NHS clearly supports a two-hour gap after iron before tea, but the reviewed source does not cleanly establish the exact same interval in both directions.",
+      "userMessage": "Prefer keeping iron about 2 hours away from tea.",
+      "evidenceIds": [
+        "ev_nhs_ferrous_sulfate"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "minimumSeparationMinutes": 120
+    },
+    {
+      "id": "iron_calcium_120_symmetric",
+      "sourceId": "iron",
+      "targetId": "calcium",
+      "classification": "strong_preference",
+      "effect": "prefer_separation",
+      "direction": "symmetric",
+      "rationale": "NIH advises taking calcium and iron at different times; MedlinePlus gives a two-hour interval after calcium-containing foods/products before iron. The reviewed sources do not cleanly support a universal symmetric 120-minute interval.",
+      "userMessage": "Taking iron and calcium at different times may improve iron absorption.",
+      "evidenceIds": [
+        "ev_nih_iron_hp",
+        "ev_medlineplus_iron_use"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "minimumSeparationMinutes": 120
+    },
+    {
+      "id": "magnesium_tetracycline_asymmetric",
+      "sourceId": "tetracycline_antibiotic",
+      "targetId": "magnesium",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "asymmetric",
+      "rationale": "NIH states tetracycline antibiotics should be at least 2 hours before or 4–6 hours after magnesium-containing supplements. The current domain model requires one exact machine value for the latter interval.",
+      "userMessage": "Magnesium needs directional separation from this tetracycline antibiotic.",
+      "evidenceIds": [
+        "ev_nih_magnesium_hp",
+        "ev_medlineplus_tetracycline"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "sourceBeforeTargetMinutes": 120,
+      "targetBeforeSourceMinutes": 360
+    },
+    {
+      "id": "magnesium_quinolone_asymmetric",
+      "sourceId": "quinolone_antibiotic",
+      "targetId": "magnesium",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "asymmetric",
+      "rationale": "NIH states quinolone antibiotics should be at least 2 hours before or 4–6 hours after magnesium-containing supplements. The current domain model requires one exact machine value for the latter interval.",
+      "userMessage": "Magnesium needs directional separation from this quinolone antibiotic.",
+      "evidenceIds": [
+        "ev_nih_magnesium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "sourceBeforeTargetMinutes": 120,
+      "targetBeforeSourceMinutes": 360
+    },
+    {
+      "id": "zinc_iron_25mg_same_time",
+      "sourceId": "zinc",
+      "targetId": "iron",
+      "classification": "strong_preference",
+      "effect": "prefer_separation",
+      "direction": "symmetric",
+      "rationale": "NIH states that 25 mg or more of elemental supplemental iron taken at the same time can reduce zinc absorption. The current rule schema lacks a precise 'avoid same dosing window' primitive without inventing a minute interval.",
+      "userMessage": "Avoid taking zinc at the same time as 25 mg or more of elemental supplemental iron.",
+      "evidenceIds": [
+        "ev_nih_zinc_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": true,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "conditions": [
+        {
+          "type": "dose_at_least",
+          "supplementId": "iron",
+          "amount": 25,
+          "unit": "mg",
+          "basis": "elemental"
+        }
+      ]
+    },
+    {
+      "id": "zinc_tetracycline_asymmetric",
+      "sourceId": "tetracycline_antibiotic",
+      "targetId": "zinc",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "asymmetric",
+      "rationale": "NIH states the antibiotic should be at least 2 hours before or 4–6 hours after zinc. The current domain model requires one exact value for the latter interval.",
+      "userMessage": "Zinc needs directional separation from this tetracycline antibiotic.",
+      "evidenceIds": [
+        "ev_nih_zinc_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "sourceBeforeTargetMinutes": 120,
+      "targetBeforeSourceMinutes": 360
+    },
+    {
+      "id": "zinc_quinolone_asymmetric",
+      "sourceId": "quinolone_antibiotic",
+      "targetId": "zinc",
+      "classification": "hard_schedule_constraint",
+      "effect": "require_separation",
+      "direction": "asymmetric",
+      "rationale": "NIH states the antibiotic should be at least 2 hours before or 4–6 hours after zinc. The current domain model requires one exact value for the latter interval.",
+      "userMessage": "Zinc needs directional separation from this quinolone antibiotic.",
+      "evidenceIds": [
+        "ev_nih_zinc_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED",
+      "sourceBeforeTargetMinutes": 120,
+      "targetBeforeSourceMinutes": 360
+    },
+    {
+      "id": "vitamin_c_cancer_therapy_warning",
+      "sourceId": "vitamin_c",
+      "targetId": "medication:cancer_therapy",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "NIH describes the safety and efficacy of antioxidant supplementation during chemotherapy/radiation as controversial and advises discussion with healthcare providers.",
+      "userMessage": "If you are receiving chemotherapy or radiation therapy, discuss vitamin C supplements with your oncology team.",
+      "evidenceIds": [
+        "ev_nih_vitamin_c_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED"
+    },
+    {
+      "id": "vitamin_d3_orlistat_warning",
+      "sourceId": "vitamin_d3",
+      "targetId": "medication:orlistat",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Orlistat can reduce vitamin D absorption.",
+      "userMessage": "Orlistat can reduce vitamin D absorption. NutriClock will not invent a timing fix.",
+      "evidenceIds": [
+        "ev_nih_vitamin_d_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED"
+    },
+    {
+      "id": "vitamin_d3_thiazide_warning",
+      "sourceId": "vitamin_d3",
+      "targetId": "medication:thiazide_diuretic",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Thiazide diuretics plus vitamin D can increase hypercalcemia risk in susceptible people; timing separation does not resolve this.",
+      "userMessage": "Vitamin D with a thiazide diuretic may require clinical review in some situations.",
+      "evidenceIds": [
+        "ev_nih_vitamin_d_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED"
+    },
+    {
+      "id": "calcium_lithium_warning",
+      "sourceId": "calcium",
+      "targetId": "medication:lithium",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Long-term lithium can increase calcium levels, and calcium supplementation can add clinical context that is not solved by timing.",
+      "userMessage": "Calcium with lithium may require clinical review. NutriClock will not treat this as a timing problem.",
+      "evidenceIds": [
+        "ev_nih_calcium_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED"
+    },
+    {
+      "id": "folate_sulfasalazine_warning",
+      "sourceId": "folate",
+      "targetId": "medication:sulfasalazine",
+      "classification": "clinical_warning",
+      "effect": "warning",
+      "direction": "symmetric",
+      "rationale": "Sulfasalazine inhibits intestinal folate absorption and may affect folate status; this is not a scheduling problem.",
+      "userMessage": "Sulfasalazine can affect folate absorption. NutriClock will not invent a timing interval.",
+      "evidenceIds": [
+        "ev_nih_folate_hp"
+      ],
+      "evidenceStrength": "authoritative_guidance",
+      "overridable": false,
+      "rulesetVersion": "1.0.0-draft",
+      "status": "RULE_REVIEW_REQUIRED"
+    }
+  ],
+  "reviewRequiredNotes": {
+    "iron_coffee_120_symmetric": "Approve the product's symmetric 120-minute interpretation or change this to a directional rule supported by the NHS wording.",
+    "iron_tea_120_symmetric": "Approve the symmetric 120-minute interpretation or encode only the explicitly supported direction.",
+    "iron_calcium_120_symmetric": "Product approval is needed before treating 120 minutes as a symmetric machine rule.",
+    "magnesium_tetracycline_asymmetric": "The source states '4 to 6 hours after'; choose an approved exact machine value (e.g. 240 or 360) before activation.",
+    "magnesium_quinolone_asymmetric": "The source states '4 to 6 hours after'; approve an exact machine value before activation.",
+    "zinc_iron_25mg_same_time": "Add/approve a machine semantic for 'same dosing window' or an exact interval before activation.",
+    "zinc_tetracycline_asymmetric": "Approve an exact value for the '4 to 6 hours after' side before activation.",
+    "zinc_quinolone_asymmetric": "Approve an exact value for the '4 to 6 hours after' side before activation.",
+    "vitamin_c_cancer_therapy_warning": "The approved V1 MedicationId catalog does not currently include a cancer-therapy entity/category.",
+    "vitamin_d3_orlistat_warning": "The approved V1 MedicationId catalog does not currently include orlistat.",
+    "vitamin_d3_thiazide_warning": "The approved V1 MedicationId catalog does not currently include thiazide diuretics.",
+    "calcium_lithium_warning": "The approved V1 MedicationId catalog does not currently include lithium.",
+    "folate_sulfasalazine_warning": "The approved V1 MedicationId catalog does not currently include sulfasalazine."
+  }
+}

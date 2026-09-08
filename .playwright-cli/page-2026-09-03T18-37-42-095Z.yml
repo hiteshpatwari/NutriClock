@@ -1,0 +1,45 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - link "NutriClock_" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=e6]:
+      - link "Your Day" [ref=e7] [cursor=pointer]:
+        - /url: /day
+      - link "Supplements" [ref=e8] [cursor=pointer]:
+        - /url: /supplements
+      - link "Medications" [ref=e9] [cursor=pointer]:
+        - /url: /medications
+      - link "Your NutriClock" [ref=e10] [cursor=pointer]:
+        - /url: /schedule
+      - link "Settings" [ref=e11] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e60]:
+    - paragraph [ref=e61]: STEP 03
+    - heading "Medications that affect timing — optional" [level=1] [ref=e62]
+    - paragraph [ref=e63]: Medication information is used only for timing rules NutriClock explicitly supports. Medication times are entered by you and never moved by the scheduler.
+    - generic [ref=e64]:
+      - generic [ref=e65]:
+        - text: Supported medication
+        - combobox "Supported medication" [ref=e66]:
+          - option "Levothyroxine / Synthroid" [selected]
+          - option "Tetracycline antibiotic"
+          - option "Quinolone antibiotic"
+          - option "Oral bisphosphonate"
+          - option "Dolutegravir"
+          - option "Penicillamine"
+          - option "Proton-pump inhibitor"
+          - option "Metformin"
+          - option "Warfarin / selected anticoagulant"
+          - option "Methotrexate"
+          - option "Selected antiepileptic"
+          - option "Levodopa"
+      - generic [ref=e67]:
+        - text: Or enter another name (unsupported coverage)
+        - textbox "Or enter another name (unsupported coverage)" [ref=e68]:
+          - /placeholder: Optional medication name
+      - generic [ref=e69]:
+        - text: Existing administration time
+        - textbox "Existing administration time" [ref=e70]: 07:00
+    - button "Add medication anchor" [ref=e71] [cursor=pointer]
+    - list [ref=e72]
+    - button "Generate my NutriClock" [ref=e73] [cursor=pointer]

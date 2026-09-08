@@ -1,0 +1,8 @@
+node_modules
+dist
+.playwright-cli
+NutriClock_Codex_MVP_Prompt.md
+NutriClock_Rules_V1.json
+NutriClock_Rules_V1.md
+NutriClock_Technical_Design.md
+pnpm-lock.yaml
