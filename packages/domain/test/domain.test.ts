@@ -5,11 +5,13 @@ import {
   buildReminderDecisions,
   buildWeeklyReview,
   compareScheduleSimplification,
+  deriveConveniencePreferences,
   generateSchedule,
   generateAdaptiveSchedule,
   repairSchedule,
   loadKnowledgeSnapshot,
   normalizeDose,
+  queryWhatCanITakeNow,
   SUPPLEMENT_CATALOG,
   validateKnowledgeSnapshot,
   type SchedulerOptions,
@@ -566,6 +568,7 @@ describe("deterministic scheduler", () => {
       "snoozed",
     );
     expect(result.schedule.items.some((entry) => entry.id === "iron-1")).toBe(false);
+    expect(result.remainingItems.every((entry) => entry.item.id !== "iron-1")).toBe(true);
   });
 
   it("keeps fixed medication anchors visible and does not turn execution events into regimen edits", () => {
@@ -590,6 +593,11 @@ describe("deterministic scheduler", () => {
     );
     expect(result.items.find((entry) => entry.item.id === "med-1")?.item.time).toEqual(t(7));
     expect(result.schedule.items.find((entry) => entry.id === "iron-1")?.time).toEqual(t(12));
+    expect(result.medications[0]).toMatchObject({
+      status: "taken",
+      scheduledTime: t(7),
+      recordedTime: t(8),
+    });
     expect(input.medications[0]?.administrationTime).toEqual(t(7));
   });
 
@@ -644,7 +652,10 @@ describe("deterministic scheduler", () => {
       { localDate: "2026-09-08", now: t(8), events: [] },
       loadKnowledgeSnapshot(),
     );
-    expect(tooSoon.availability.find((entry) => entry.itemId === "iron-1")?.status).toBe("wait");
+    expect(tooSoon.availability.find((entry) => entry.itemId === "iron-1")).toMatchObject({
+      status: "wait",
+      nextValidTime: t(11),
+    });
     const validNow = generateAdaptiveSchedule(
       input,
       { localDate: "2026-09-08", now: t(11), events: [] },
@@ -653,6 +664,65 @@ describe("deterministic scheduler", () => {
     expect(validNow.availability.find((entry) => entry.itemId === "iron-1")?.status).toBe(
       "available_now",
     );
+  });
+
+  it("adapts the remaining schedule forward without changing the canonical regimen", () => {
+    const input = regimen([
+      supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(8) }),
+      supplement({ id: id("c-1"), supplementId: "vitamin_c", preferredTime: t(9) }),
+    ]);
+    const result = generateAdaptiveSchedule(
+      input,
+      { localDate: "2026-09-08", now: t(12), events: [] },
+      loadKnowledgeSnapshot(),
+    );
+
+    expect(result.items.filter((entry) => entry.item.kind === "supplement")).toHaveLength(2);
+    expect(
+      result.remainingItems
+        .filter((entry) => entry.item.kind === "supplement")
+        .every((entry) => (entry.item.time?.minuteOfDay ?? 0) >= 12),
+    ).toBe(true);
+    expect(input.supplements.map((entry) => entry.preferredTime)).toEqual([t(8), t(9)]);
+  });
+
+  it("answers what-can-I-take-now with deterministic supplement decisions and medication status", () => {
+    const input = regimen(
+      [supplement({ id: id("iron-1"), supplementId: "iron", formId: "iron_oral_common" })],
+      [
+        medication({
+          id: id("med-1"),
+          displayName: "Levothyroxine / Synthroid",
+          reference: { kind: "supported", medicationId: "levothyroxine" },
+        }),
+      ],
+    );
+    const result = queryWhatCanITakeNow(
+      input,
+      {
+        localDate: "2026-09-08",
+        now: t(12),
+        events: [
+          { id: "skip-breakfast", kind: "meal_skipped", mealName: "breakfast", time: t(8) },
+          { id: "later-bedtime", kind: "bedtime_changed", time: t(22) },
+          { id: "taken-med", kind: "medication_taken", anchorId: "med-1", time: t(7, 30) },
+        ],
+      },
+      loadKnowledgeSnapshot(),
+    );
+
+    expect(result.available.map((entry) => entry.item.sourceId)).toEqual(["iron-1"]);
+    expect(result.waiting).toHaveLength(0);
+    expect(result.medicationStatus).toEqual([
+      {
+        anchorId: "med-1",
+        displayName: "Levothyroxine / Synthroid",
+        status: "taken",
+        scheduledTime: t(7),
+        recordedTime: t(7, 30),
+      },
+    ]);
+    expect(input.medications[0]?.administrationTime).toEqual(t(7));
   });
 
   it("summarizes schedule complexity without implying medical quality", () => {
@@ -754,5 +824,47 @@ describe("deterministic scheduler", () => {
     ]);
     expect(insights[0]).toMatchObject({ kind: "frequently_skipped", itemId: "iron-1", count: 2 });
     expect(insights[0]?.message).not.toContain("absorb");
+  });
+
+  it("derives convenience preferences from repeated local execution logs without mutating regimen state", () => {
+    const input = regimen([supplement({ id: id("iron-1"), supplementId: "iron" })]);
+    const preferences = deriveConveniencePreferences(input, [
+      {
+        localDate: "2026-09-08",
+        events: [{ id: "taken-1", kind: "supplement_taken", itemId: "iron-1", time: t(10) }],
+      },
+      {
+        localDate: "2026-09-09",
+        events: [{ id: "taken-2", kind: "supplement_taken", itemId: "iron-1", time: t(12) }],
+      },
+    ]);
+
+    expect(preferences).toEqual([
+      {
+        itemId: "iron-1",
+        preferredTime: t(11),
+        observedDays: 2,
+        message: expect.stringContaining("convenience preference only"),
+      },
+    ]);
+    expect(input.supplements[0]?.preferredTime).toBeUndefined();
+  });
+
+  it("uses a repeated execution window only as a soft preference", () => {
+    const input = regimen([
+      supplement({ id: id("iron-1"), supplementId: "iron", formId: "iron_oral_common" }),
+    ]);
+    const result = generateSchedule(input, loadKnowledgeSnapshot(), {
+      conveniencePreferences: [
+        {
+          itemId: "iron-1",
+          preferredTime: t(12),
+          observedDays: 2,
+          message: "local-only",
+        },
+      ],
+    });
+    expect(result.items.find((entry) => entry.id === "iron-1")?.time).toEqual(t(12));
+    expect(input.supplements[0]?.preferredTime).toBeUndefined();
   });
 });

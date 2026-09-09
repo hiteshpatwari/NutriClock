@@ -4,14 +4,17 @@ import {
   buildConvenienceInsights,
   buildReminderDecisions,
   buildWeeklyReview,
+  deriveConveniencePreferences,
   compareScheduleSimplification,
   generateAdaptiveSchedule,
   generateSchedule,
   loadKnowledgeSnapshot,
   repairSchedule,
+  queryWhatCanITakeNow,
   type AdaptiveScheduleResult,
   type CanonicalRegimen,
   type ConvenienceInsight,
+  type ConveniencePreference,
   type DayContext,
   type DayEvent,
   type DailyExecutionLog,
@@ -26,6 +29,7 @@ import {
   type RoutineTemplate,
   type UserOverride,
   type WeeklyReviewSummary,
+  type WhatCanITakeNowResult,
 } from "@nutriclock/domain";
 import { createEmptyState, type RegimenRepository } from "@nutriclock/persistence";
 import type { PersistedNutriClockState } from "@nutriclock/domain";
@@ -50,6 +54,7 @@ export interface NutriClockApplication {
   setOverride(override: UserOverride): Promise<NutriClockAppState>;
   generate(): Promise<GeneratedScheduleView | null>;
   loadToday(localDate: string, now: DayContext["now"]): AdaptiveScheduleResult | null;
+  queryWhatCanITakeNow(localDate: string, now: DayContext["now"]): WhatCanITakeNowResult | null;
   recordDayEvent(
     localDate: string,
     now: DayContext["now"],
@@ -61,7 +66,9 @@ export interface NutriClockApplication {
   getQuestionCandidates(): QuestionCandidate[];
   getNextQuestion(): QuestionCandidate | null;
   getScheduleRepair(): ScheduleRepairResult | null;
+  getWhatCanITakeNow(): WhatCanITakeNowResult | null;
   getConvenienceInsights(): ConvenienceInsight[];
+  getConveniencePreferences(): ConveniencePreference[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
   saveRoutineTemplate(template: RoutineTemplate): Promise<NutriClockAppState>;
   applyRoutineTemplate(templateId: string): Promise<NutriClockAppState>;
@@ -106,7 +113,9 @@ export function createNutriClockApplication(
 
   const generate = async (): Promise<GeneratedScheduleView | null> => {
     if (!current.regimen) return null;
-    const schedule: ScheduleResult = generateSchedule(current.regimen, knowledge);
+    const schedule: ScheduleResult = generateSchedule(current.regimen, knowledge, {
+      conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+    });
     const view: GeneratedScheduleView = { schedule, generatedAt: new Date().toISOString() };
     try {
       await repository.save({
@@ -220,9 +229,23 @@ export function createNutriClockApplication(
       if (!current.regimen) return null;
       const log = current.dailyLogs.find((entry) => entry.localDate === localDate);
       const context: DayContext = { localDate, now, events: log?.events ?? [] };
-      const today = generateAdaptiveSchedule(current.regimen, context, knowledge);
+      const today = generateAdaptiveSchedule(current.regimen, context, knowledge, {
+        conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+      });
       current = { ...current, today };
       return today;
+    },
+    queryWhatCanITakeNow(localDate, now) {
+      if (!current.regimen) return null;
+      const log = current.dailyLogs.find((entry) => entry.localDate === localDate);
+      return queryWhatCanITakeNow(
+        current.regimen,
+        { localDate, now, events: log?.events ?? [] },
+        knowledge,
+        {
+          conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+        },
+      );
     },
     async recordDayEvent(localDate, now, event) {
       if (!current.regimen) return null;
@@ -239,6 +262,7 @@ export function createNutriClockApplication(
         await save(current.regimen, {
           ...createEmptyState(current.regimen),
           dailyLogs,
+          routineTemplates: current.routineTemplates,
           rulesetVersionLastEvaluated: current.rulesetVersionLastEvaluated,
           evidenceRegistryVersionLastEvaluated: current.evidenceRegistryVersionLastEvaluated,
         });
@@ -254,7 +278,11 @@ export function createNutriClockApplication(
     },
     getScheduleQuality() {
       if (!current.regimen) return null;
-      return assessScheduleQuality(generateSchedule(current.regimen, knowledge));
+      return assessScheduleQuality(
+        generateSchedule(current.regimen, knowledge, {
+          conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+        }),
+      );
     },
     getScheduleSimplification() {
       if (!current.regimen) return null;
@@ -276,9 +304,19 @@ export function createNutriClockApplication(
       if (!current.regimen || !current.today) return null;
       return repairSchedule(current.regimen, current.today.context, knowledge);
     },
+    getWhatCanITakeNow() {
+      if (!current.today || !current.regimen) return null;
+      return queryWhatCanITakeNow(current.regimen, current.today.context, knowledge, {
+        conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+      });
+    },
     getConvenienceInsights() {
       if (!current.regimen) return [];
       return buildConvenienceInsights(current.regimen, current.dailyLogs);
+    },
+    getConveniencePreferences() {
+      if (!current.regimen) return [];
+      return deriveConveniencePreferences(current.regimen, current.dailyLogs);
     },
     getWeeklyReview(weekStart) {
       if (!current.regimen) return null;
@@ -318,18 +356,28 @@ export function createNutriClockApplication(
       const comparison = compareScheduleSimplification(current.regimen, knowledge);
       if (!comparison.canSimplify) return current;
       const simplerTimes = new Map(
-        comparison.simpler.items
-          .filter((item) => item.kind === "supplement" && item.time)
-          .map((item) => [item.sourceId, item]),
+        current.regimen.supplements
+          .map((supplement) => {
+            const simplerItem = comparison.simpler.items.find(
+              (item) => item.kind === "supplement" && item.sourceId === supplement.id,
+            );
+            const selectedTime = simplerItem?.time ?? supplement.preferredTime;
+            return selectedTime ? ([supplement.id, selectedTime] as const) : undefined;
+          })
+          .filter((entry): entry is readonly [string, NonNullable<typeof entry>[1]] =>
+            Boolean(entry),
+          ),
       );
       const overrides = [
         ...current.regimen.overrides.filter((override) => !simplerTimes.has(override.itemId)),
-        ...[...simplerTimes.entries()].map(([itemId, item]) => ({
+        ...[...simplerTimes.entries()].map(([itemId, selectedTime]) => ({
           id: `simplification:${itemId}`,
           itemId,
-          selectedTime: item.time!,
+          selectedTime,
           kind: "preference_override" as const,
-          acknowledgedRuleIds: item.influencingRuleIds,
+          acknowledgedRuleIds:
+            comparison.simpler.items.find((item) => item.sourceId === itemId)?.influencingRuleIds ??
+            [],
           createdFromRulesetVersion: knowledge.rulesetVersion,
         })),
       ];

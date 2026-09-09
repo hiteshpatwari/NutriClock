@@ -1,6 +1,7 @@
 node_modules
 dist
 .playwright-cli
+apps/mobile/expo-env.d.ts
 NutriClock_Codex_MVP_Prompt.md
 NutriClock_Rules_V1.json
 NutriClock_Rules_V1.md

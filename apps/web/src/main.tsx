@@ -13,6 +13,7 @@ import {
   type DoseBasis,
   type DoseUnit,
   type LocalTime,
+  type MealName,
   type MedicationAnchor,
   type RoutineTemplate,
   type SupplementEntry,
@@ -49,6 +50,19 @@ const weekStartKey = (date = new Date()) => {
 };
 const addMinutes = (value: LocalTime, minutes: number): LocalTime => ({
   minuteOfDay: Math.min(1439, value.minuteOfDay + minutes),
+});
+
+const mealNames: Array<{ name: MealName; label: string }> = [
+  { name: "breakfast", label: "Breakfast" },
+  { name: "lunch", label: "Lunch" },
+  { name: "dinner", label: "Dinner" },
+  { name: "snack", label: "Snack" },
+];
+
+const routineCopy = (routine: CanonicalRegimen["routine"]): CanonicalRegimen["routine"] => ({
+  ...routine,
+  meals: routine.meals.map((meal) => ({ ...meal })),
+  beverages: routine.beverages.map((beverage) => ({ ...beverage })),
 });
 
 const defaultRegimen: CanonicalRegimen = {
@@ -205,9 +219,16 @@ function Step({ number, title, children }: { number: string; title: string; chil
 function TodayPage({ app }: { app: NutriClockApplication }) {
   const [, setRevision] = useState(0);
   const [now, setNow] = useState(localNow());
-  const [wakeValue, setWakeValue] = useState(inputTime(now));
-  const [coffeeValue, setCoffeeValue] = useState(inputTime(now));
-  const [mealValue, setMealValue] = useState(inputTime(now));
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [wakeValue, setWakeValue] = useState("07:00");
+  const [bedtimeValue, setBedtimeValue] = useState("23:00");
+  const [mealValues, setMealValues] = useState<Record<MealName, string>>({
+    breakfast: "08:00",
+    lunch: "12:00",
+    dinner: "18:00",
+    snack: "15:00",
+  });
+  const [beverageValues, setBeverageValues] = useState({ coffee: "08:00", tea: "15:00" });
   const date = localDateKey();
   const regimen = app.state.regimen;
   const refreshToday = () => {
@@ -221,6 +242,32 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
     const interval = window.setInterval(refreshToday, 60_000);
     return () => window.clearInterval(interval);
   }, [app, date, regimen]);
+  useEffect(() => {
+    const routine = app.state.regimen?.routine;
+    if (!routine) return;
+    setWakeValue(inputTime(routine.wakeTime));
+    setBedtimeValue(inputTime(routine.bedtime));
+    setMealValues(
+      (current) =>
+        Object.fromEntries(
+          mealNames.map(({ name }) => [
+            name,
+            inputTime(
+              routine.meals.find((meal) => meal.name === name)?.time ?? time(current[name]),
+            ),
+          ]),
+        ) as Record<MealName, string>,
+    );
+    setBeverageValues((current) => ({
+      coffee: inputTime(
+        routine.beverages.find((beverage) => beverage.kind === "coffee")?.time ??
+          time(current.coffee),
+      ),
+      tea: inputTime(
+        routine.beverages.find((beverage) => beverage.kind === "tea")?.time ?? time(current.tea),
+      ),
+    }));
+  }, [app.state.regimen]);
   const today = app.state.today;
   const takeNow = today?.availability.filter((entry) => entry.status === "available_now") ?? [];
   const betterToWait = today?.availability.filter((entry) => entry.status === "wait") ?? [];
@@ -233,6 +280,20 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
     await app.recordDayEvent(date, localNow(), event);
     refreshToday();
   };
+  const itemForAvailability = (itemId: string) =>
+    today?.items.find((entry) => entry.item.sourceId === itemId || entry.item.id === itemId)?.item;
+  const medicationTakenIds = new Set(
+    (today?.context.events ?? [])
+      .filter(
+        (event): event is Extract<DayEvent, { kind: "medication_taken" }> =>
+          event.kind === "medication_taken",
+      )
+      .map((event) => event.anchorId),
+  );
+  const setMealValue = (name: MealName, value: string) =>
+    setMealValues((current) => ({ ...current, [name]: value }));
+  const setBeverageValue = (kind: "coffee" | "tea", value: string) =>
+    setBeverageValues((current) => ({ ...current, [kind]: value }));
   if (!app.state.regimen) {
     return (
       <section className="card">
@@ -261,14 +322,16 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
       </p>
       <div className="now-card">
         <h2>What can I take now?</h2>
+        <p className="helper">
+          This is a timing view for today&apos;s recorded context. It does not recommend a
+          supplement, dose, or make-up dose.
+        </p>
         {takeNow.length > 0 ? (
           <div className="availability-group">
             <strong>Take now</strong>
             {takeNow.map((entry) => (
               <p key={entry.itemId}>
-                <strong>
-                  {today?.items.find((item) => item.item.id === entry.itemId)?.item.displayName}
-                </strong>{" "}
+                <strong>{itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}</strong>{" "}
                 {entry.message}
                 {entry.nextValidTime &&
                   entry.nextValidTime.minuteOfDay !== now.minuteOfDay &&
@@ -335,8 +398,8 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         </div>
       </div>
       <div className="today-actions">
-        <button className="secondary" onClick={() => setWakeValue(inputTime(now))}>
-          Adjust today
+        <button className="secondary" onClick={() => setAdjustOpen((open) => !open)}>
+          {adjustOpen ? "Close today's adjustments" : "Adjust today"}
         </button>
         <button
           className="secondary"
@@ -364,6 +427,9 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         >
           Record breakfast now
         </button>
+        <Link className="secondary action-link" to="/routines">
+          Use a travel or shift routine
+        </Link>
       </div>
       {repair && repair.changes.length > 0 && (
         <section className="repair-panel" aria-labelledby="repair-heading">
@@ -380,66 +446,137 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
           </ul>
         </section>
       )}
-      <div className="today-adjust">
-        <label>
-          New wake time
-          <input
-            type="time"
-            value={wakeValue}
-            onChange={(event) => setWakeValue(event.target.value)}
-          />
-        </label>
-        <button
-          className="secondary"
-          onClick={() =>
-            void record({ id: newId(), kind: "wake_time_changed", time: time(wakeValue) })
-          }
-        >
-          Apply wake time
-        </button>
-        <label>
-          Breakfast time
-          <input
-            type="time"
-            value={mealValue}
-            onChange={(event) => setMealValue(event.target.value)}
-          />
-        </label>
-        <button
-          className="secondary"
-          onClick={() =>
-            void record({
-              id: newId(),
-              kind: "meal_recorded",
-              mealName: "breakfast",
-              time: time(mealValue),
-            })
-          }
-        >
-          Move breakfast
-        </button>
-        <label>
-          Coffee time
-          <input
-            type="time"
-            value={coffeeValue}
-            onChange={(event) => setCoffeeValue(event.target.value)}
-          />
-        </label>
-        <button
-          className="secondary"
-          onClick={() =>
-            void record({
-              id: newId(),
-              kind: "beverage_recorded",
-              beverageKind: "coffee",
-              time: time(coffeeValue),
-            })
-          }
-        >
-          Move coffee
-        </button>
-      </div>
+      {adjustOpen && (
+        <section className="today-adjust" aria-label="Adjust today's context">
+          <div className="adjust-heading">
+            <div>
+              <p className="eyebrow">TODAY ONLY</p>
+              <h2>Adjust today's context</h2>
+            </div>
+            <p className="helper">
+              Record what happened or what you expect today. Your saved routine stays unchanged.
+            </p>
+          </div>
+          <div className="adjust-row">
+            <label>
+              Wake time
+              <input
+                type="time"
+                value={wakeValue}
+                onChange={(event) => setWakeValue(event.target.value)}
+              />
+            </label>
+            <button
+              className="secondary"
+              onClick={() =>
+                void record({ id: newId(), kind: "wake_time_changed", time: time(wakeValue) })
+              }
+            >
+              Record wake time
+            </button>
+          </div>
+          <div className="adjust-row">
+            <label>
+              Bedtime
+              <input
+                type="time"
+                value={bedtimeValue}
+                onChange={(event) => setBedtimeValue(event.target.value)}
+              />
+            </label>
+            <button
+              className="secondary"
+              onClick={() =>
+                void record({ id: newId(), kind: "bedtime_changed", time: time(bedtimeValue) })
+              }
+            >
+              Record bedtime
+            </button>
+          </div>
+          <div className="adjust-controls">
+            <h3>Meals</h3>
+            {mealNames.map(({ name, label }) => (
+              <div className="adjust-row" key={name}>
+                <label>
+                  {label}
+                  <input
+                    type="time"
+                    value={mealValues[name]}
+                    onChange={(event) => setMealValue(name, event.target.value)}
+                  />
+                </label>
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    void record({
+                      id: newId(),
+                      kind: "meal_recorded",
+                      mealName: name,
+                      time: time(mealValues[name]),
+                    })
+                  }
+                >
+                  Record {label.toLowerCase()}
+                </button>
+                <button
+                  className="linkbutton"
+                  onClick={() =>
+                    void record({
+                      id: newId(),
+                      kind: "meal_skipped",
+                      mealName: name,
+                      time: localNow(),
+                    })
+                  }
+                >
+                  Skip
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="adjust-controls">
+            <h3>Beverages</h3>
+            {(["coffee", "tea"] as const).map((kind) => (
+              <div className="adjust-row" key={kind}>
+                <label>
+                  {kind.toUpperCase()}
+                  <input
+                    type="time"
+                    value={beverageValues[kind]}
+                    onChange={(event) => setBeverageValue(kind, event.target.value)}
+                  />
+                </label>
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    void record({
+                      id: newId(),
+                      kind: "beverage_recorded",
+                      beverageKind: kind,
+                      time: time(beverageValues[kind]),
+                    })
+                  }
+                >
+                  Record {kind}
+                </button>
+                <button
+                  className="linkbutton"
+                  onClick={() =>
+                    void record({
+                      id: newId(),
+                      kind: "beverage_skipped",
+                      beverageKind: kind,
+                      time: localNow(),
+                    })
+                  }
+                >
+                  Skip
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="today-timeline">
         {today?.items.map((entry) => (
           <article className="today-item" key={entry.item.id}>
@@ -516,6 +653,24 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
                   Skip
                 </button>
               </div>
+            )}
+            {entry.item.fixed && !medicationTakenIds.has(entry.item.sourceId) && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  void record({
+                    id: newId(),
+                    kind: "medication_taken",
+                    anchorId: entry.item.sourceId,
+                    time: localNow(),
+                  })
+                }
+              >
+                Record taken
+              </button>
+            )}
+            {entry.item.fixed && medicationTakenIds.has(entry.item.sourceId) && (
+              <p className="status">Taken today · medication time remains fixed</p>
             )}
           </article>
         ))}
@@ -658,8 +813,8 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
         </div>
       )}
       <p className="helper">
-        Use Today to record what happened and adapt the remaining day. NutriClock never changes
-        medication anchors or recommends doses.
+        Use Today to record what happened and adapt the remaining day. NutriClock never changes your
+        supplements, doses, or medication anchors.
       </p>
       <Link to="/today">Open Today</Link>
     </section>
@@ -669,6 +824,39 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
 function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
   const [, setRevision] = useState(0);
   const [name, setName] = useState("");
+  const [wake, setWake] = useState("07:00");
+  const [bedtime, setBedtime] = useState("23:00");
+  const [mealValues, setMealValues] = useState<Record<MealName, string>>({
+    breakfast: "",
+    lunch: "",
+    dinner: "",
+    snack: "",
+  });
+  const [beverageValues, setBeverageValues] = useState({ coffee: "", tea: "" });
+  useEffect(() => {
+    const routine = app.state.regimen?.routine;
+    if (!routine) return;
+    setWake(inputTime(routine.wakeTime));
+    setBedtime(inputTime(routine.bedtime));
+    setMealValues(
+      Object.fromEntries(
+        mealNames.map(({ name: mealName }) => [
+          mealName,
+          routine.meals.find((meal) => meal.name === mealName)
+            ? inputTime(routine.meals.find((meal) => meal.name === mealName)!.time)
+            : "",
+        ]),
+      ) as Record<MealName, string>,
+    );
+    setBeverageValues({
+      coffee: routine.beverages.find((beverage) => beverage.kind === "coffee")
+        ? inputTime(routine.beverages.find((beverage) => beverage.kind === "coffee")!.time)
+        : "",
+      tea: routine.beverages.find((beverage) => beverage.kind === "tea")
+        ? inputTime(routine.beverages.find((beverage) => beverage.kind === "tea")!.time)
+        : "",
+    });
+  }, [app.state.regimen]);
   if (!app.state.regimen) {
     return (
       <section className="card">
@@ -679,19 +867,30 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
       </section>
     );
   }
-  const saveTemplate = async () => {
+  const saveTemplate = async (useCurrentRoutine = false) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const routine = app.state.regimen?.routine;
     if (!routine) return;
+    const customRoutine = {
+      ...routine,
+      wakeTime: time(wake),
+      bedtime: time(bedtime),
+      meals: mealNames
+        .filter(({ name: mealName }) => mealValues[mealName])
+        .map(({ name: mealName }) => ({
+          id: newId(),
+          name: mealName,
+          time: time(mealValues[mealName]),
+        })),
+      beverages: (["coffee", "tea"] as const)
+        .filter((kind) => beverageValues[kind])
+        .map((kind) => ({ id: newId(), kind, time: time(beverageValues[kind]) })),
+    };
     const template: RoutineTemplate = {
       id: newId(),
       name: trimmed,
-      routine: {
-        ...routine,
-        meals: routine.meals.map((meal) => ({ ...meal })),
-        beverages: routine.beverages.map((beverage) => ({ ...beverage })),
-      },
+      routine: routineCopy(useCurrentRoutine ? routine : customRoutine),
     };
     await app.saveRoutineTemplate(template);
     setName("");
@@ -706,21 +905,69 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
       <p className="eyebrow">ROUTINES</p>
       <h1>Routine templates</h1>
       <p className="helper">
-        Save different day shapes such as Office day or Weekend. Applying one changes meal,
-        beverage, wake, and bedtime context only; it never changes your supplements, doses, or
-        medication anchors.
+        Save different day shapes such as Office day, Travel day, or Night shift. Applying one
+        changes meal, beverage, wake, and bedtime context only; it never changes your supplements,
+        doses, or medication anchors.
       </p>
-      <div className="template-create">
+      <div className="template-create template-create-form">
         <label>
-          Template name
+          Routine name
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Office day"
+            placeholder="Travel day or night shift"
           />
         </label>
+        <p className="metadata">
+          Only enter times you know. Blank meals and beverages stay absent from this routine.
+        </p>
+        <div className="formgrid routine-grid">
+          <label>
+            Wake time
+            <input type="time" value={wake} onChange={(event) => setWake(event.target.value)} />
+          </label>
+          <label>
+            Bedtime
+            <input
+              type="time"
+              value={bedtime}
+              onChange={(event) => setBedtime(event.target.value)}
+            />
+          </label>
+          {mealNames.map(({ name: mealName, label }) => (
+            <label key={mealName}>
+              {label} <span>(optional)</span>
+              <input
+                type="time"
+                value={mealValues[mealName]}
+                onChange={(event) =>
+                  setMealValues((current) => ({ ...current, [mealName]: event.target.value }))
+                }
+              />
+            </label>
+          ))}
+          {(["coffee", "tea"] as const).map((kind) => (
+            <label key={kind}>
+              {kind.toUpperCase()} <span>(optional)</span>
+              <input
+                type="time"
+                value={beverageValues[kind]}
+                onChange={(event) =>
+                  setBeverageValues((current) => ({ ...current, [kind]: event.target.value }))
+                }
+              />
+            </label>
+          ))}
+        </div>
         <button onClick={() => void saveTemplate()} disabled={!name.trim()}>
-          Save current routine
+          Save this routine template
+        </button>
+        <button
+          className="secondary"
+          onClick={() => void saveTemplate(true)}
+          disabled={!name.trim()}
+        >
+          Save current routine instead
         </button>
       </div>
       <div className="template-list">
@@ -732,7 +979,9 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
                 <p className="metadata">
                   Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
                   {formatLocalTime(template.routine.bedtime)} · {template.routine.meals.length} meal
-                  {template.routine.meals.length === 1 ? "" : "s"}
+                  {template.routine.meals.length === 1 ? "" : "s"} ·{" "}
+                  {template.routine.beverages.length} beverage
+                  {template.routine.beverages.length === 1 ? "" : "s"}
                 </p>
               </div>
               <button className="secondary" onClick={() => void applyTemplate(template.id)}>
