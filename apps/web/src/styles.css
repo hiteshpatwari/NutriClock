@@ -712,6 +712,18 @@ select:focus-visible {
   font-size: 0.9rem;
   font-weight: 700;
 }
+.reviewer-bot-fixture {
+  margin-top: 28px;
+  padding: 18px;
+  border: 2px dashed #ad3e37;
+  background: #fff0ee;
+}
+.reviewer-bot-fixture h2 {
+  margin-top: 0;
+}
+.reviewer-bot-fixture input {
+  margin-bottom: 8px;
+}
 .semantic-window {
   margin: 4px 0;
   color: #175f52;

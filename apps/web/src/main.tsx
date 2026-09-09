@@ -21,6 +21,7 @@ import {
   type SupplementFormId,
 } from "@nutriclock/domain";
 import { createIndexedDbRepository } from "./persistence/indexeddb-repository";
+import { ReviewerBotFixture } from "./reviewer-bot-fixture";
 import "./styles.css";
 
 const time = (value: string): LocalTime => ({
@@ -1733,6 +1734,7 @@ function TogetherPage({ app }: { app: NutriClockApplication }) {
       <p>
         <Link to="/schedule">View your schedule</Link>
       </p>
+      <ReviewerBotFixture />
     </section>
   );
 }
