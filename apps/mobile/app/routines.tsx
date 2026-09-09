@@ -34,27 +34,16 @@ export default function Routines() {
     if (!routine) return;
     const valueForMeal = (mealName: MealName) => {
       const meal = routine.meals.find((entry) => entry.name === mealName);
-      return meal
-        ? `${String(Math.floor(meal.time.minuteOfDay / 60)).padStart(2, "0")}:${String(meal.time.minuteOfDay % 60).padStart(2, "0")}`
-        : "";
+      return meal ? `${String(Math.floor(meal.time.minuteOfDay / 60)).padStart(2, "0")}:${String(meal.time.minuteOfDay % 60).padStart(2, "0")}` : "";
     };
     const valueForBeverage = (kind: "coffee" | "tea") => {
       const beverage = routine.beverages.find((entry) => entry.kind === kind);
-      return beverage
-        ? `${String(Math.floor(beverage.time.minuteOfDay / 60)).padStart(2, "0")}:${String(beverage.time.minuteOfDay % 60).padStart(2, "0")}`
-        : "";
+      return beverage ? `${String(Math.floor(beverage.time.minuteOfDay / 60)).padStart(2, "0")}:${String(beverage.time.minuteOfDay % 60).padStart(2, "0")}` : "";
     };
-    setWake(
-      `${String(Math.floor(routine.wakeTime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.wakeTime.minuteOfDay % 60).padStart(2, "0")}`,
-    );
-    setBedtime(
-      `${String(Math.floor(routine.bedtime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.bedtime.minuteOfDay % 60).padStart(2, "0")}`,
-    );
-    setMealTimes(
-      Object.fromEntries(
-        mealNames.map(({ name: mealName }) => [mealName, valueForMeal(mealName)]),
-      ) as Record<MealName, string>,
-    );
+    setWake(`${String(Math.floor(routine.wakeTime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.wakeTime.minuteOfDay % 60).padStart(2, "0")}`);
+    setBedtime(`${String(Math.floor(routine.bedtime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.bedtime.minuteOfDay % 60).padStart(2, "0")}`);
+    setMealTimes(Object.fromEntries(mealNames.map(({ name: mealName }) => [mealName, valueForMeal(mealName)])) as Record<MealName, string>);
+
     setBeverages({ coffee: valueForBeverage("coffee"), tea: valueForBeverage("tea") });
   }, [app.state.regimen]);
   if (!app.state.regimen) {
@@ -125,20 +114,8 @@ export default function Routines() {
         <Text style={styles.muted}>
           Only enter times you know. Blank meals and beverages stay absent from this routine.
         </Text>
-        <TextInput
-          accessibilityLabel="Wake time"
-          style={styles.input}
-          value={wake}
-          onChangeText={setWake}
-          placeholder="Wake time"
-        />
-        <TextInput
-          accessibilityLabel="Bedtime"
-          style={styles.input}
-          value={bedtime}
-          onChangeText={setBedtime}
-          placeholder="Bedtime"
-        />
+        <TextInput accessibilityLabel="Wake time" style={styles.input} value={wake} onChangeText={setWake} placeholder="Wake time" />
+        <TextInput accessibilityLabel="Bedtime" style={styles.input} value={bedtime} onChangeText={setBedtime} placeholder="Bedtime" />
         {mealNames.map(({ name: mealName, label }) => (
           <TextInput
             key={mealName}
@@ -159,20 +136,10 @@ export default function Routines() {
             placeholder={`${kind.toUpperCase()} time (optional)`}
           />
         ))}
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          disabled={!name.trim()}
-          onPress={() => void saveTemplate()}
-        >
+        <Pressable accessibilityRole="button" style={styles.button} disabled={!name.trim()} onPress={() => void saveTemplate()}>
           <Text style={styles.buttonText}>Save travel / shift routine</Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          disabled={!name.trim()}
-          onPress={() => void saveTemplate(true)}
-        >
+        <Pressable accessibilityRole="button" style={styles.button} disabled={!name.trim()} onPress={() => void saveTemplate(true)}>
           <Text style={styles.buttonText}>Save current routine instead</Text>
         </Pressable>
         {app.state.routineTemplates.length ? (

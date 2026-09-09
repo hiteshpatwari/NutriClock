@@ -238,16 +238,13 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
     if (!routine) return;
     setWakeValue(inputTime(routine.wakeTime));
     setBedtimeValue(inputTime(routine.bedtime));
-    setMealValues(
-      (current) =>
-        Object.fromEntries(
-          mealNames.map(({ name }) => [
-            name,
-            inputTime(
-              routine.meals.find((meal) => meal.name === name)?.time ?? time(current[name]),
-            ),
-          ]),
-        ) as Record<MealName, string>,
+    setMealValues((current) =>
+      Object.fromEntries(
+        mealNames.map(({ name }) => [
+          name,
+          inputTime(routine.meals.find((meal) => meal.name === name)?.time ?? time(current[name])),
+        ]),
+      ) as Record<MealName, string>,
     );
     setBeverageValues((current) => ({
       coffee: inputTime(
@@ -277,10 +274,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
   );
   const medicationTakenIds = new Set(
     (today?.context.events ?? [])
-      .filter(
-        (event): event is Extract<DayEvent, { kind: "medication_taken" }> =>
-          event.kind === "medication_taken",
-      )
+      .filter((event): event is Extract<DayEvent, { kind: "medication_taken" }> => event.kind === "medication_taken")
       .map((event) => event.anchorId),
   );
   const setMealValue = (name: MealName, value: string) =>
@@ -326,9 +320,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <ul>
                 {availableNow.map((entry) => (
                   <li key={entry.itemId}>
-                    <strong>
-                      {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}
-                    </strong>
+                    <strong>{itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}</strong>
                     <span>{entry.message}</span>
                   </li>
                 ))}
@@ -343,12 +335,9 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <ul>
                 {waiting.map((entry) => (
                   <li key={entry.itemId}>
-                    <strong>
-                      {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}
-                    </strong>
+                    <strong>{itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}</strong>
                     <span>
-                      Next valid time:{" "}
-                      {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available"}
+                      Next valid time: {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available"}
                     </span>
                   </li>
                 ))}
@@ -363,9 +352,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <ul>
                 {unavailable.map((entry) => (
                   <li key={entry.itemId}>
-                    <strong>
-                      {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}
-                    </strong>
+                    <strong>{itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}</strong>
                     <span>{entry.message}</span>
                   </li>
                 ))}
@@ -448,43 +435,23 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <p className="eyebrow">TODAY ONLY</p>
               <h2>Adjust today's context</h2>
             </div>
-            <p className="helper">
-              Record what happened or what you expect today. Your saved routine stays unchanged.
-            </p>
+            <p className="helper">Record what happened or what you expect today. Your saved routine stays unchanged.</p>
           </div>
           <div className="adjust-row">
             <label>
               Wake time
-              <input
-                type="time"
-                value={wakeValue}
-                onChange={(event) => setWakeValue(event.target.value)}
-              />
+              <input type="time" value={wakeValue} onChange={(event) => setWakeValue(event.target.value)} />
             </label>
-            <button
-              className="secondary"
-              onClick={() =>
-                void record({ id: newId(), kind: "wake_time_changed", time: time(wakeValue) })
-              }
-            >
+            <button className="secondary" onClick={() => void record({ id: newId(), kind: "wake_time_changed", time: time(wakeValue) })}>
               Record wake time
             </button>
           </div>
           <div className="adjust-row">
             <label>
               Bedtime
-              <input
-                type="time"
-                value={bedtimeValue}
-                onChange={(event) => setBedtimeValue(event.target.value)}
-              />
+              <input type="time" value={bedtimeValue} onChange={(event) => setBedtimeValue(event.target.value)} />
             </label>
-            <button
-              className="secondary"
-              onClick={() =>
-                void record({ id: newId(), kind: "bedtime_changed", time: time(bedtimeValue) })
-              }
-            >
+            <button className="secondary" onClick={() => void record({ id: newId(), kind: "bedtime_changed", time: time(bedtimeValue) })}>
               Record bedtime
             </button>
           </div>
@@ -494,36 +461,12 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <div className="adjust-row" key={name}>
                 <label>
                   {label}
-                  <input
-                    type="time"
-                    value={mealValues[name]}
-                    onChange={(event) => setMealValue(name, event.target.value)}
-                  />
+                  <input type="time" value={mealValues[name]} onChange={(event) => setMealValue(name, event.target.value)} />
                 </label>
-                <button
-                  className="secondary"
-                  onClick={() =>
-                    void record({
-                      id: newId(),
-                      kind: "meal_recorded",
-                      mealName: name,
-                      time: time(mealValues[name]),
-                    })
-                  }
-                >
+                <button className="secondary" onClick={() => void record({ id: newId(), kind: "meal_recorded", mealName: name, time: time(mealValues[name]) })}>
                   Record {label.toLowerCase()}
                 </button>
-                <button
-                  className="linkbutton"
-                  onClick={() =>
-                    void record({
-                      id: newId(),
-                      kind: "meal_skipped",
-                      mealName: name,
-                      time: localNow(),
-                    })
-                  }
-                >
+                <button className="linkbutton" onClick={() => void record({ id: newId(), kind: "meal_skipped", mealName: name, time: localNow() })}>
                   Skip
                 </button>
               </div>
@@ -535,36 +478,12 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
               <div className="adjust-row" key={kind}>
                 <label>
                   {kind.toUpperCase()}
-                  <input
-                    type="time"
-                    value={beverageValues[kind]}
-                    onChange={(event) => setBeverageValue(kind, event.target.value)}
-                  />
+                  <input type="time" value={beverageValues[kind]} onChange={(event) => setBeverageValue(kind, event.target.value)} />
                 </label>
-                <button
-                  className="secondary"
-                  onClick={() =>
-                    void record({
-                      id: newId(),
-                      kind: "beverage_recorded",
-                      beverageKind: kind,
-                      time: time(beverageValues[kind]),
-                    })
-                  }
-                >
+                <button className="secondary" onClick={() => void record({ id: newId(), kind: "beverage_recorded", beverageKind: kind, time: time(beverageValues[kind]) })}>
                   Record {kind}
                 </button>
-                <button
-                  className="linkbutton"
-                  onClick={() =>
-                    void record({
-                      id: newId(),
-                      kind: "beverage_skipped",
-                      beverageKind: kind,
-                      time: localNow(),
-                    })
-                  }
-                >
+                <button className="linkbutton" onClick={() => void record({ id: newId(), kind: "beverage_skipped", beverageKind: kind, time: localNow() })}>
                   Skip
                 </button>
               </div>
@@ -912,45 +831,25 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
           </label>
           <label>
             Bedtime
-            <input
-              type="time"
-              value={bedtime}
-              onChange={(event) => setBedtime(event.target.value)}
-            />
+            <input type="time" value={bedtime} onChange={(event) => setBedtime(event.target.value)} />
           </label>
           {mealNames.map(({ name: mealName, label }) => (
             <label key={mealName}>
               {label} <span>(optional)</span>
-              <input
-                type="time"
-                value={mealValues[mealName]}
-                onChange={(event) =>
-                  setMealValues((current) => ({ ...current, [mealName]: event.target.value }))
-                }
-              />
+              <input type="time" value={mealValues[mealName]} onChange={(event) => setMealValues((current) => ({ ...current, [mealName]: event.target.value }))} />
             </label>
           ))}
           {(["coffee", "tea"] as const).map((kind) => (
             <label key={kind}>
               {kind.toUpperCase()} <span>(optional)</span>
-              <input
-                type="time"
-                value={beverageValues[kind]}
-                onChange={(event) =>
-                  setBeverageValues((current) => ({ ...current, [kind]: event.target.value }))
-                }
-              />
+              <input type="time" value={beverageValues[kind]} onChange={(event) => setBeverageValues((current) => ({ ...current, [kind]: event.target.value }))} />
             </label>
           ))}
         </div>
         <button onClick={() => void saveTemplate()} disabled={!name.trim()}>
           Save this routine template
         </button>
-        <button
-          className="secondary"
-          onClick={() => void saveTemplate(true)}
-          disabled={!name.trim()}
-        >
+        <button className="secondary" onClick={() => void saveTemplate(true)} disabled={!name.trim()}>
           Save current routine instead
         </button>
       </div>
@@ -963,8 +862,7 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
                 <p className="metadata">
                   Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
                   {formatLocalTime(template.routine.bedtime)} · {template.routine.meals.length} meal
-                  {template.routine.meals.length === 1 ? "" : "s"} ·{" "}
-                  {template.routine.beverages.length} beverage
+                  {template.routine.meals.length === 1 ? "" : "s"} · {template.routine.beverages.length} beverage
                   {template.routine.beverages.length === 1 ? "" : "s"}
                 </p>
               </div>

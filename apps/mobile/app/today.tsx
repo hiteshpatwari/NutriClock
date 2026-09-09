@@ -68,9 +68,7 @@ export default function Today() {
       Object.fromEntries(
         mealNames.map(({ name }) => [
           name,
-          inputTime(
-            routine.meals.find((meal) => meal.name === name)?.time ?? parseTime(mealTimes[name]),
-          ),
+          inputTime(routine.meals.find((meal) => meal.name === name)?.time ?? parseTime(mealTimes[name])),
         ]),
       ) as Record<MealName, string>,
     );
@@ -92,17 +90,12 @@ export default function Today() {
   };
   const itemForAvailability = (itemId: string) =>
     today?.items.find((entry) => entry.item.sourceId === itemId || entry.item.id === itemId)?.item;
-  const availableNow =
-    today?.availability.filter((entry) => entry.status === "available_now") ?? [];
+  const availableNow = today?.availability.filter((entry) => entry.status === "available_now") ?? [];
   const waiting = today?.availability.filter((entry) => entry.status === "wait") ?? [];
-  const unavailable =
-    today?.availability.filter((entry) => entry.status === "unavailable_today") ?? [];
+  const unavailable = today?.availability.filter((entry) => entry.status === "unavailable_today") ?? [];
   const medicationTakenIds = new Set(
     (today?.context.events ?? [])
-      .filter(
-        (event): event is Extract<DayEvent, { kind: "medication_taken" }> =>
-          event.kind === "medication_taken",
-      )
+      .filter((event): event is Extract<DayEvent, { kind: "medication_taken" }> => event.kind === "medication_taken")
       .map((event) => event.anchorId),
   );
   if (!app.state.regimen) {
@@ -137,30 +130,20 @@ export default function Today() {
             What can I take now?
           </Text>
           <Text style={styles.muted}>
-            Timing based on today's recorded context. No supplement, dose, or make-up dose is
-            recommended here.
+            Timing based on today's recorded context. No supplement, dose, or make-up dose is recommended here.
           </Text>
           <Text style={styles.sectionTitle}>Available now</Text>
-          {availableNow.length ? (
-            availableNow.map((entry) => (
-              <Text key={entry.itemId} style={styles.body}>
-                {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}: {entry.message}
-              </Text>
-            ))
-          ) : (
-            <Text style={styles.body}>Nothing is marked available right now.</Text>
-          )}
+          {availableNow.length ? availableNow.map((entry) => (
+            <Text key={entry.itemId} style={styles.body}>
+              {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}: {entry.message}
+            </Text>
+          )) : <Text style={styles.body}>Nothing is marked available right now.</Text>}
           <Text style={styles.sectionTitle}>Waiting for a valid window</Text>
-          {waiting.length ? (
-            waiting.map((entry) => (
-              <Text key={entry.itemId} style={styles.body}>
-                {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId} · Next valid time:{" "}
-                {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available"}
-              </Text>
-            ))
-          ) : (
-            <Text style={styles.body}>No supplement is waiting on a later window.</Text>
-          )}
+          {waiting.length ? waiting.map((entry) => (
+            <Text key={entry.itemId} style={styles.body}>
+              {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId} · Next valid time: {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available"}
+            </Text>
+          )) : <Text style={styles.body}>No supplement is waiting on a later window.</Text>}
           {unavailable.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>No supported window today</Text>
@@ -205,9 +188,7 @@ export default function Today() {
           </View>
         </View>
         <Text style={styles.sectionTitle}>Adjust today's context</Text>
-        <Text style={styles.muted}>
-          These records apply to today only. Your saved routine stays unchanged.
-        </Text>
+        <Text style={styles.muted}>These records apply to today only. Your saved routine stays unchanged.</Text>
         <TextInput
           accessibilityLabel="New wake time"
           style={styles.input}
@@ -238,13 +219,7 @@ export default function Today() {
         <Pressable
           accessibilityRole="button"
           style={styles.button}
-          onPress={() =>
-            void record({
-              id: "mobile-day-bedtime-" + Date.now(),
-              kind: "bedtime_changed",
-              time: parseTime(bedtime),
-            })
-          }
+          onPress={() => void record({ id: "mobile-day-bedtime-" + Date.now(), kind: "bedtime_changed", time: parseTime(bedtime) })}
         >
           <Text style={styles.buttonText}>Record bedtime</Text>
         </Pressable>
@@ -258,31 +233,10 @@ export default function Today() {
               onChangeText={(value) => setMealTimes((current) => ({ ...current, [name]: value }))}
               placeholder={`${label} time`}
             />
-            <Pressable
-              accessibilityRole="button"
-              style={styles.button}
-              onPress={() =>
-                void record({
-                  id: `mobile-day-${name}-` + Date.now(),
-                  kind: "meal_recorded",
-                  mealName: name,
-                  time: parseTime(mealTimes[name]),
-                })
-              }
-            >
+            <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: `mobile-day-${name}-` + Date.now(), kind: "meal_recorded", mealName: name, time: parseTime(mealTimes[name]) })}>
               <Text style={styles.buttonText}>Record {label.toLowerCase()}</Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                void record({
-                  id: `mobile-day-${name}-skip-` + Date.now(),
-                  kind: "meal_skipped",
-                  mealName: name,
-                  time: nowTime(),
-                })
-              }
-            >
+            <Pressable accessibilityRole="button" onPress={() => void record({ id: `mobile-day-${name}-skip-` + Date.now(), kind: "meal_skipped", mealName: name, time: nowTime() })}>
               <Text style={styles.link}>Skip {label.toLowerCase()}</Text>
             </Pressable>
           </View>
@@ -308,6 +262,22 @@ export default function Today() {
           }
         >
           <Text style={styles.buttonText}>Record coffee time</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void record({ id: "mobile-day-coffee-skip-" + Date.now(), kind: "beverage_skipped", beverageKind: "coffee", time: nowTime() })}>
+          <Text style={styles.link}>Skip coffee</Text>
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Tea time"
+          style={styles.input}
+          value={beverages.tea}
+          onChangeText={(value) => setBeverages((current) => ({ ...current, tea: value }))}
+          placeholder="Tea time"
+        />
+        <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: "mobile-day-tea-" + Date.now(), kind: "beverage_recorded", beverageKind: "tea", time: parseTime(beverages.tea) })}>
+          <Text style={styles.buttonText}>Record tea time</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void record({ id: "mobile-day-tea-skip-" + Date.now(), kind: "beverage_skipped", beverageKind: "tea", time: nowTime() })}>
+          <Text style={styles.link}>Skip tea</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -445,18 +415,7 @@ export default function Today() {
               </View>
             )}
             {entry.item.fixed && !medicationTakenIds.has(entry.item.sourceId) && (
-              <Pressable
-                accessibilityRole="button"
-                style={styles.button}
-                onPress={() =>
-                  void record({
-                    id: "mobile-day-medication-" + Date.now(),
-                    kind: "medication_taken",
-                    anchorId: entry.item.sourceId,
-                    time: nowTime(),
-                  })
-                }
-              >
+              <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: "mobile-day-medication-" + Date.now(), kind: "medication_taken", anchorId: entry.item.sourceId, time: nowTime() })}>
                 <Text style={styles.buttonText}>Record taken</Text>
               </Pressable>
             )}
