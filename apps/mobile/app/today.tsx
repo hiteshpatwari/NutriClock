@@ -281,6 +281,53 @@ export default function Today() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          onPress={() =>
+            void record({
+              id: "mobile-day-coffee-skip-" + Date.now(),
+              kind: "beverage_skipped",
+              beverageKind: "coffee",
+              time: nowTime(),
+            })
+          }
+        >
+          <Text style={styles.link}>Skip coffee</Text>
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Tea time"
+          style={styles.input}
+          value={beverages.tea}
+          onChangeText={(value) => setBeverages((current) => ({ ...current, tea: value }))}
+          placeholder="Tea time"
+        />
+        <Pressable
+          accessibilityRole="button"
+          style={styles.button}
+          onPress={() =>
+            void record({
+              id: "mobile-day-tea-" + Date.now(),
+              kind: "beverage_recorded",
+              beverageKind: "tea",
+              time: parseTime(beverages.tea),
+            })
+          }
+        >
+          <Text style={styles.buttonText}>Record tea time</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            void record({
+              id: "mobile-day-tea-skip-" + Date.now(),
+              kind: "beverage_skipped",
+              beverageKind: "tea",
+              time: nowTime(),
+            })
+          }
+        >
+          <Text style={styles.link}>Skip tea</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           style={styles.button}
           onPress={() =>
             void record({

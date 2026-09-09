@@ -716,8 +716,8 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
         </div>
       )}
       <p className="helper">
-        Use Today to record what happened and adapt the remaining day. NutriClock never changes
-        medication anchors or recommends doses.
+        Use Today to record what happened and adapt the remaining day. NutriClock never changes your
+        supplements, doses, or medication anchors.
       </p>
       <Link to="/today">Open Today</Link>
     </section>

@@ -43,6 +43,7 @@ export default function Routines() {
     setWake(`${String(Math.floor(routine.wakeTime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.wakeTime.minuteOfDay % 60).padStart(2, "0")}`);
     setBedtime(`${String(Math.floor(routine.bedtime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.bedtime.minuteOfDay % 60).padStart(2, "0")}`);
     setMealTimes(Object.fromEntries(mealNames.map(({ name: mealName }) => [mealName, valueForMeal(mealName)])) as Record<MealName, string>);
+
     setBeverages({ coffee: valueForBeverage("coffee"), tea: valueForBeverage("tea") });
   }, [app.state.regimen]);
   if (!app.state.regimen) {
