@@ -50,7 +50,7 @@ nav a {
 .eyebrow {
   font-size: 0.75rem;
   letter-spacing: 0.16em;
-  color: #bb5e3d;
+  color: #9e4b32;
   font-weight: 800;
   margin: 0 0 12px;
 }
@@ -104,6 +104,10 @@ button {
   cursor: pointer;
   margin-top: 20px;
 }
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 button:hover {
   background: #0f473d;
 }
@@ -127,7 +131,7 @@ label {
 }
 label span {
   font-weight: 400;
-  color: #71817a;
+  color: #5d6b64;
   font-size: 0.85em;
 }
 input,
@@ -164,7 +168,8 @@ select {
   border-bottom: 1px solid #d7ddd2;
 }
 .linkbutton {
-  padding: 6px 12px;
+  min-height: 44px;
+  padding: 10px 14px;
   margin: 0;
   font-size: 0.85rem;
 }
@@ -218,7 +223,7 @@ select {
 }
 .status {
   margin: 4px 0;
-  color: #62756c;
+  color: #51645b;
   font-size: 0.9rem;
 }
 details {
@@ -232,7 +237,7 @@ summary {
 .source,
 .metadata {
   font-size: 0.82rem;
-  color: #6f7e77;
+  color: #5d6b64;
 }
 .source span {
   margin-right: 8px;
@@ -269,6 +274,16 @@ summary {
     align-items: flex-start;
     gap: 14px;
     flex-direction: column;
+  }
+  nav {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  nav a {
+    white-space: nowrap;
   }
   .hero {
     padding: 60px 0 30px;
@@ -336,6 +351,25 @@ select:focus-visible {
 .reminder-line {
   color: #175f52;
   font-weight: 700;
+}
+.repair-panel {
+  margin: 18px 0;
+  padding: 16px 18px;
+  border: 1px solid #e4c98f;
+  border-radius: 12px;
+  background: #fff8e7;
+}
+.repair-panel h2 {
+  margin: 0 0 6px;
+  color: #7a4f12;
+  font-size: 1.1rem;
+}
+.repair-panel ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.repair-panel li + li {
+  margin-top: 6px;
 }
 .today-actions,
 .today-adjust,
@@ -480,4 +514,68 @@ select:focus-visible {
 }
 .source a + a {
   margin-left: 12px;
+}
+.schedule-status {
+  margin-top: 24px;
+}
+.schedule-status h2,
+.assumptions h2,
+.question-card h2 {
+  margin: 0 0 8px;
+  color: #173f38;
+  font-size: 1.1rem;
+}
+.schedule-status p {
+  margin: 0;
+}
+.assumptions {
+  margin: 18px 0;
+  padding: 16px 18px;
+  border: 1px solid #d7ddd2;
+  border-radius: 12px;
+  background: #fffaf0;
+}
+.assumptions ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.question-card {
+  margin: 18px 0 24px;
+  padding: 18px;
+  border: 1px solid #b4d0bf;
+  border-radius: 14px;
+  background: #f1f7f3;
+}
+.question-card p {
+  margin: 6px 0 12px;
+}
+.question-link {
+  display: inline-block;
+  font-weight: 800;
+  color: #175f52;
+}
+.semantic-window {
+  margin: 4px 0;
+  color: #175f52;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.availability-group {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #b4d0bf;
+}
+.availability-group p {
+  margin: 5px 0 0;
+}
+.warning-copy {
+  color: #7c4c18;
+}
+.first-value-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.first-value-actions button {
+  margin-top: 0;
 }

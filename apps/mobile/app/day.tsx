@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, router } from "expo-router";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { styles } from "./index";
@@ -9,6 +9,8 @@ const minute = (value: string) => {
   const [hours, minutes] = value.split(":").map(Number);
   return { minuteOfDay: (hours ?? 0) * 60 + (minutes ?? 0) };
 };
+const formatTime = (value: { minuteOfDay: number }) =>
+  `${String(Math.floor(value.minuteOfDay / 60)).padStart(2, "0")}:${String(value.minuteOfDay % 60).padStart(2, "0")}`;
 export default function Day() {
   const { app, refresh } = useNutriClockApplication();
   const current = app.state.regimen;
@@ -27,29 +29,48 @@ export default function Day() {
   const [fat, setFat] = useState(true);
   const [coffee, setCoffee] = useState("");
   const [tea, setTea] = useState("");
+  useEffect(() => {
+    if (!current) return;
+    const breakfastMeal = current.routine.meals.find((meal) => meal.name === "breakfast");
+    const coffeeEvent = current.routine.beverages.find((event) => event.kind === "coffee");
+    const teaEvent = current.routine.beverages.find((event) => event.kind === "tea");
+    setWake(formatTime(current.routine.wakeTime));
+    setBed(formatTime(current.routine.bedtime));
+    setBreakfast(breakfastMeal ? formatTime(breakfastMeal.time) : "");
+    setFat(breakfastMeal?.containsDietaryFat === true);
+    setCoffee(coffeeEvent ? formatTime(coffeeEvent.time) : "");
+    setTea(teaEvent ? formatTime(teaEvent.time) : "");
+  }, [current]);
   const save = async () => {
+    const meals = base.routine.meals.filter((meal) => meal.name !== "breakfast");
+    const breakfastMeal = base.routine.meals.find((meal) => meal.name === "breakfast");
+    if (breakfast)
+      meals.push({
+        id: breakfastMeal?.id ?? "mobile-breakfast",
+        name: "breakfast",
+        time: minute(breakfast),
+        containsDietaryFat: fat,
+      });
+    const beverages = base.routine.beverages.filter(
+      (event) => event.kind !== "coffee" && event.kind !== "tea",
+    );
+    const coffeeEvent = base.routine.beverages.find((event) => event.kind === "coffee");
+    const teaEvent = base.routine.beverages.find((event) => event.kind === "tea");
+    if (coffee)
+      beverages.push({
+        id: coffeeEvent?.id ?? "mobile-coffee",
+        kind: "coffee",
+        time: minute(coffee),
+      });
+    if (tea) beverages.push({ id: teaEvent?.id ?? "mobile-tea", kind: "tea", time: minute(tea) });
     await app.replaceRegimen({
       ...base,
       routine: {
         ...base.routine,
         wakeTime: minute(wake),
         bedtime: minute(bed),
-        meals: breakfast
-          ? [
-              {
-                id: "mobile-breakfast",
-                name: "breakfast",
-                time: minute(breakfast),
-                containsDietaryFat: fat,
-              },
-            ]
-          : [],
-        beverages: [
-          ...(coffee
-            ? [{ id: "mobile-coffee", kind: "coffee" as const, time: minute(coffee) }]
-            : []),
-          ...(tea ? [{ id: "mobile-tea", kind: "tea" as const, time: minute(tea) }] : []),
-        ],
+        meals,
+        beverages,
       },
     });
     refresh();

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b256ea79-e3ae-422c-85df-f32799d702f4" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/_layout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/_layout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/day.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/day.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/medications.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/medications.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/routines.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/routines.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/schedule-adjust.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/schedule-adjust.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/schedule.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/schedule.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/supplements.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/supplements.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/app/today.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app/today.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/app-context.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/app-context.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/application/src/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/application/src/index.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 0,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3J6IZZWEQSVucTCPKjJvXSj8itp" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "codex/v2",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/projects/NutriClock"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b256ea79-e3ae-422c-85df-f32799d702f4" name="Changes" comment="" />
+      <created>1788975148481</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1788975148481</updated>
+    </task>
+    <servers />
+  </component>
+</project>

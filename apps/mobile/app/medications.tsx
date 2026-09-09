@@ -14,7 +14,7 @@ export default function Medications() {
   const regimen = app.state.regimen;
   const [selected, setSelected] = useState(MEDICATION_CATALOG[0]!.id);
   const [name, setName] = useState("");
-  const [time, setTime] = useState("07:00");
+  const [time, setTime] = useState("");
   const add = async () => {
     if (!regimen) return;
     const catalog = MEDICATION_CATALOG.find((entry) => entry.id === selected)!;
@@ -24,7 +24,7 @@ export default function Medications() {
       reference: name
         ? { kind: "unsupported", userEnteredName: name }
         : { kind: "supported", medicationId: selected },
-      administrationTime: minute(time),
+      ...(time ? { administrationTime: minute(time) } : {}),
     };
     await app.replaceRegimen({ ...regimen, medications: [...regimen.medications, anchor] });
     refresh();
@@ -76,7 +76,7 @@ export default function Medications() {
           />
         </Text>
         <Text style={styles.label}>
-          Existing administration time
+          Usual administration time (optional — ask later if needed)
           <TextInput
             accessibilityLabel="Administration time"
             style={styles.input}
@@ -93,7 +93,14 @@ export default function Medications() {
             style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
           >
             <Text style={styles.muted}>
-              {item.displayName} · {item.administrationTime.minuteOfDay} · fixed
+              {item.displayName} ·{" "}
+              {item.administrationTime
+                ? `${Math.floor(item.administrationTime.minuteOfDay / 60)
+                    .toString()
+                    .padStart(2, "0")}:${(item.administrationTime.minuteOfDay % 60)
+                    .toString()
+                    .padStart(2, "0")} · fixed`
+                : "time needed before related timing can be resolved"}
             </Text>
             <Pressable accessibilityRole="button" onPress={() => void remove(item.id)}>
               <Text style={styles.link}>Remove</Text>

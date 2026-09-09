@@ -64,6 +64,12 @@ const formLabels: Record<SupplementFormId, string> = {
   iron_oral_common: "Common oral iron",
   calcium_carbonate: "Calcium carbonate",
   calcium_citrate: "Calcium citrate",
+  opaque_product: "Keep as generic multivitamin",
+};
+const supplementAliases: Record<string, string[]> = {
+  vitamin_d3: ["d3", "vitamin d"],
+  vitamin_b12: ["b12", "cobalamin"],
+  folate: ["folic acid"],
 };
 
 function useApplication(): { app: NutriClockApplication; refresh: () => void } {
@@ -123,7 +129,7 @@ function Layout() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<Welcome onStart={() => navigate("/day")} />} />
+          <Route path="/" element={<Welcome onStart={() => navigate("/supplements")} />} />
           <Route path="/today" element={<TodayPage app={app} />} />
           <Route path="/review" element={<ReviewPage app={app} />} />
           <Route path="/routines" element={<RoutineTemplatesPage app={app} />} />
@@ -144,6 +150,7 @@ function Layout() {
                 regimen={regimen}
                 onSave={saveRegimen}
                 onNext={() => navigate("/medications")}
+                onGenerate={generate}
               />
             }
           />
@@ -154,6 +161,7 @@ function Layout() {
             }
           />
           <Route path="/schedule" element={<SchedulePage app={app} onGenerate={generate} />} />
+          <Route path="/improve" element={<ContextQuestionPage app={app} refresh={refresh} />} />
           <Route
             path="/schedule/adjust"
             element={<ScheduleAdjustPage app={app} regimen={regimen} refresh={refresh} />}
@@ -201,6 +209,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
   const [coffeeValue, setCoffeeValue] = useState(inputTime(now));
   const [mealValue, setMealValue] = useState(inputTime(now));
   const date = localDateKey();
+  const regimen = app.state.regimen;
   const refreshToday = () => {
     const current = localNow();
     setNow(current);
@@ -211,8 +220,13 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
     refreshToday();
     const interval = window.setInterval(refreshToday, 60_000);
     return () => window.clearInterval(interval);
-  }, [app, date]);
+  }, [app, date, regimen]);
   const today = app.state.today;
+  const takeNow = today?.availability.filter((entry) => entry.status === "available_now") ?? [];
+  const betterToWait = today?.availability.filter((entry) => entry.status === "wait") ?? [];
+  const notNow = today?.availability.filter((entry) => entry.status === "not_now") ?? [];
+  const flexibleNow = today?.availability.filter((entry) => entry.status === "flexible") ?? [];
+  const repair = app.getScheduleRepair();
   const reminderDecisions = app.getReminderDecisions();
   const remindersEnabled = app.state.regimen?.preferences.remindersEnabled === true;
   const record = async (event: DayEvent) => {
@@ -228,7 +242,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
           Once your regimen is set up, Today will show what remains and help you adapt the rest of
           the day.
         </p>
-        <Link to="/day">Start with Your Day</Link>
+        <Link to="/supplements">Start with your supplements</Link>
       </section>
     );
   }
@@ -247,20 +261,51 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
       </p>
       <div className="now-card">
         <h2>What can I take now?</h2>
-        {today?.availability.some((entry) => entry.status === "available_now") ? (
-          today.availability
-            .filter((entry) => entry.status === "available_now")
-            .map((entry) => (
+        {takeNow.length > 0 ? (
+          <div className="availability-group">
+            <strong>Take now</strong>
+            {takeNow.map((entry) => (
               <p key={entry.itemId}>
                 <strong>
-                  {today.items.find((item) => item.item.id === entry.itemId)?.item.displayName}
+                  {today?.items.find((item) => item.item.id === entry.itemId)?.item.displayName}
                 </strong>{" "}
-                is available based on your recorded day context.
+                {entry.message}
+                {entry.nextValidTime &&
+                  entry.nextValidTime.minuteOfDay !== now.minuteOfDay &&
+                  ` Next valid time: ${formatLocalTime(entry.nextValidTime)}.`}
               </p>
-            ))
+            ))}
+          </div>
         ) : (
-          <p>No supplement is currently marked available. Review the next windows below.</p>
+          <p>No supplement is currently marked available right now.</p>
         )}
+        {betterToWait.length > 0 && (
+          <div className="availability-group">
+            <strong>Better to wait</strong>
+            {betterToWait.map((entry) => (
+              <p key={entry.itemId}>{entry.message}</p>
+            ))}
+          </div>
+        )}
+        {notNow.length > 0 && (
+          <div className="availability-group warning-copy">
+            <strong>Not now</strong>
+            {notNow.map((entry) => (
+              <p key={entry.itemId}>{entry.message}</p>
+            ))}
+          </div>
+        )}
+        {flexibleNow.length > 0 && (
+          <div className="availability-group">
+            <strong>Flexible</strong>
+            {flexibleNow.map((entry) => (
+              <p key={entry.itemId}>{entry.message}</p>
+            ))}
+          </div>
+        )}
+        <p>
+          <Link to="/schedule">Open schedule explanations and sources</Link>
+        </p>
         <div className="reminder-panel">
           <strong>Local reminder guidance</strong>
           <p>
@@ -320,6 +365,21 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
           Record breakfast now
         </button>
       </div>
+      {repair && repair.changes.length > 0 && (
+        <section className="repair-panel" aria-labelledby="repair-heading">
+          <p className="eyebrow">SCHEDULE REPAIR</p>
+          <h2 id="repair-heading">What changed for the rest of today</h2>
+          <p className="helper">
+            NutriClock recalculated only the remaining items and preserved completed items and fixed
+            medication anchors.
+          </p>
+          <ul>
+            {repair.changes.map((change) => (
+              <li key={`${change.itemId}:${change.kind}`}>{change.message}</li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="today-adjust">
         <label>
           New wake time
@@ -385,7 +445,9 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
           <article className="today-item" key={entry.item.id}>
             <div>
               <span className="time">
-                {entry.item.time ? formatLocalTime(entry.item.time) : "No window"}
+                {entry.item.time
+                  ? formatLocalTime(entry.item.time)
+                  : entry.item.semanticWindow.label}
               </span>
               <h2>{entry.item.displayName}</h2>
               <p className="status">
@@ -401,6 +463,15 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
                           ? "Available now"
                           : "Upcoming"}
               </p>
+              {entry.item.fixed &&
+                today?.context.events.find(
+                  (event) =>
+                    event.kind === "medication_taken" && event.anchorId === entry.item.sourceId,
+                ) && (
+                  <p className="status">
+                    Recorded today; the entered medication anchor remains fixed.
+                  </p>
+                )}
             </div>
             {!entry.item.fixed && entry.executionStatus === "planned" && (
               <div className="today-item-actions">
@@ -474,7 +545,7 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
         <p className="helper">
           Your local execution review will appear after you create a regimen.
         </p>
-        <Link to="/day">Start with Your Day</Link>
+        <Link to="/supplements">Start with your supplements</Link>
       </section>
     );
   }
@@ -604,7 +675,7 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
         <p className="eyebrow">ROUTINES</p>
         <h1>Build your NutriClock first</h1>
         <p className="helper">Save routine templates after setting your day shape.</p>
-        <Link to="/day">Start with Your Day</Link>
+        <Link to="/supplements">Start with your supplements</Link>
       </section>
     );
   }
@@ -693,20 +764,43 @@ function DayForm({
   const [fat, setFat] = useState(false);
   const [coffee, setCoffee] = useState("");
   const [tea, setTea] = useState("");
+  useEffect(() => {
+    const breakfastMeal = regimen.routine.meals.find((meal) => meal.name === "breakfast");
+    const coffeeEvent = regimen.routine.beverages.find((event) => event.kind === "coffee");
+    const teaEvent = regimen.routine.beverages.find((event) => event.kind === "tea");
+    setWake(inputTime(regimen.routine.wakeTime));
+    setBed(inputTime(regimen.routine.bedtime));
+    setBreakfast(breakfastMeal ? inputTime(breakfastMeal.time) : "");
+    setFat(breakfastMeal?.containsDietaryFat === true);
+    setCoffee(coffeeEvent ? inputTime(coffeeEvent.time) : "");
+    setTea(teaEvent ? inputTime(teaEvent.time) : "");
+  }, [regimen]);
   const save = async () => {
+    const meals = regimen.routine.meals.filter((meal) => meal.name !== "breakfast");
+    const breakfastMeal = regimen.routine.meals.find((meal) => meal.name === "breakfast");
+    if (breakfast)
+      meals.push({
+        id: breakfastMeal?.id ?? newId(),
+        name: "breakfast",
+        time: time(breakfast),
+        containsDietaryFat: fat,
+      });
+    const beverages = regimen.routine.beverages.filter(
+      (event) => event.kind !== "coffee" && event.kind !== "tea",
+    );
+    const coffeeEvent = regimen.routine.beverages.find((event) => event.kind === "coffee");
+    const teaEvent = regimen.routine.beverages.find((event) => event.kind === "tea");
+    if (coffee)
+      beverages.push({ id: coffeeEvent?.id ?? newId(), kind: "coffee", time: time(coffee) });
+    if (tea) beverages.push({ id: teaEvent?.id ?? newId(), kind: "tea", time: time(tea) });
     await onSave({
       ...regimen,
       routine: {
         ...regimen.routine,
         wakeTime: time(wake),
         bedtime: time(bed),
-        meals: breakfast
-          ? [{ id: newId(), name: "breakfast", time: time(breakfast), containsDietaryFat: fat }]
-          : [],
-        beverages: [
-          ...(coffee ? [{ id: newId(), kind: "coffee" as const, time: time(coffee) }] : []),
-          ...(tea ? [{ id: newId(), kind: "tea" as const, time: time(tea) }] : []),
-        ],
+        meals,
+        beverages,
       },
     });
     onNext();
@@ -757,31 +851,46 @@ function SupplementForm({
   regimen,
   onSave,
   onNext,
+  onGenerate,
 }: {
   regimen: CanonicalRegimen;
   onSave: (next: CanonicalRegimen) => Promise<void>;
   onNext: () => void;
+  onGenerate: () => Promise<void>;
 }) {
-  const [supplementId, setSupplementId] = useState(SUPPLEMENT_CATALOG[0]!.id);
-  const [formId, setFormId] = useState("unspecified");
+  const [supplementId, setSupplementId] = useState<SupplementEntry["supplementId"] | "">("");
+  const [search, setSearch] = useState("");
+  const [formId, setFormId] = useState<SupplementFormId>("unspecified");
   const [dose, setDose] = useState("1");
-  const [unit, setUnit] = useState<DoseUnit>(SUPPLEMENT_CATALOG[0]!.defaultUnit);
+  const [unit, setUnit] = useState<DoseUnit>("mg");
   const [basis, setBasis] = useState<DoseBasis>("unknown");
   const [preferred, setPreferred] = useState("");
-  const catalog = SUPPLEMENT_CATALOG.find((entry) => entry.id === supplementId)!;
+  const catalog = SUPPLEMENT_CATALOG.find((entry) => entry.id === supplementId);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredCatalog = SUPPLEMENT_CATALOG.filter(
+    (entry) =>
+      !normalizedSearch ||
+      entry.displayName.toLowerCase().includes(normalizedSearch) ||
+      supplementAliases[entry.id]?.some((alias) => alias.includes(normalizedSearch)),
+  );
   const selectSupplement = (nextId: SupplementEntry["supplementId"]) => {
     const nextCatalog = SUPPLEMENT_CATALOG.find((entry) => entry.id === nextId)!;
     setSupplementId(nextId);
-    setFormId("unspecified");
+    setFormId(
+      nextCatalog.supportedForms.includes("unspecified")
+        ? "unspecified"
+        : nextCatalog.supportedForms[0]!,
+    );
     setDose("1");
     setUnit(nextCatalog.defaultUnit);
     setBasis("unknown");
     setPreferred("");
   };
   const add = async () => {
+    if (!catalog) return;
     const entry: SupplementEntry = {
       id: newId(),
-      supplementId,
+      supplementId: catalog.id,
       formId: formId as SupplementEntry["formId"],
       dose: Number(dose),
       unit: unit as SupplementEntry["unit"],
@@ -798,12 +907,21 @@ function SupplementForm({
       supplements: regimen.supplements.filter((entry) => entry.id !== id),
     });
   return (
-    <Step number="02" title="Your Supplements">
+    <Step number="01" title="What do you currently take?">
       <p className="helper">
-        Add only supplements you have already decided to take. NutriClock stores your dose; it does
-        not judge or change it.
+        Add supplements you have already decided to take. NutriClock can build a useful suggested
+        schedule before you enter your full routine. It stores your dose; it does not judge or
+        change it.
       </p>
       <div className="formgrid">
+        <label>
+          Search supplements <span>(aliases supported)</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Try D3, B12, or iron"
+          />
+        </label>
         <label>
           Supplement
           <select
@@ -812,67 +930,77 @@ function SupplementForm({
               selectSupplement(event.target.value as SupplementEntry["supplementId"])
             }
           >
-            {SUPPLEMENT_CATALOG.map((entry) => (
+            <option value="">Choose a supplement</option>
+            {filteredCatalog.map((entry) => (
               <option key={entry.id} value={entry.id}>
                 {entry.displayName}
               </option>
             ))}
           </select>
         </label>
-        <label>
-          Form
-          <select
-            value={formId}
-            onChange={(event) => setFormId(event.target.value as SupplementFormId)}
-          >
-            {catalog.supportedForms.map((form) => (
-              <option key={form} value={form}>
-                {formLabels[form]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Dose
-          <input
-            inputMode="decimal"
-            value={dose}
-            onChange={(event) => setDose(event.target.value)}
-          />
-        </label>
-        <label>
-          Unit
-          <select value={unit} onChange={(event) => setUnit(event.target.value as DoseUnit)}>
-            {catalog.supportedUnits.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-        {catalog.doseBasisRelevant && (
-          <label>
-            What amount does the label show?
-            <select value={basis} onChange={(event) => setBasis(event.target.value as DoseBasis)}>
-              <option value="elemental">Elemental {catalog.displayName.toLowerCase()}</option>
-              <option value="product_label_amount">Product/compound amount</option>
-              <option value="unknown">I'm not sure</option>
-            </select>
-            <span>
-              {catalog.id === "iron"
-                ? "Some iron products list the total compound amount while the Supplement Facts panel lists elemental iron. NutriClock only uses elemental-amount thresholds when you explicitly identify the amount as elemental."
-                : "Some labels distinguish elemental amount from total product or compound amount. Amount-based thresholds are used only when you identify the basis."}
-            </span>
-          </label>
+        {catalog && (
+          <>
+            <label>
+              Form
+              <select
+                value={formId}
+                onChange={(event) => setFormId(event.target.value as SupplementFormId)}
+              >
+                {catalog.supportedForms.map((form) => (
+                  <option key={form} value={form}>
+                    {formLabels[form]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Dose
+              <input
+                inputMode="decimal"
+                value={dose}
+                onChange={(event) => setDose(event.target.value)}
+              />
+            </label>
+            <label>
+              Unit
+              <select value={unit} onChange={(event) => setUnit(event.target.value as DoseUnit)}>
+                {catalog.supportedUnits.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            {catalog.doseBasisRelevant && (
+              <label>
+                What amount does the label show?
+                <select
+                  value={basis}
+                  onChange={(event) => setBasis(event.target.value as DoseBasis)}
+                >
+                  <option value="elemental">Elemental {catalog.displayName.toLowerCase()}</option>
+                  <option value="product_label_amount">Product/compound amount</option>
+                  <option value="unknown">I'm not sure</option>
+                </select>
+                <span>
+                  {catalog.id === "iron"
+                    ? "Some iron products list the total compound amount while the Supplement Facts panel lists elemental iron. NutriClock only uses elemental-amount thresholds when you explicitly identify the amount as elemental."
+                    : "Some labels distinguish elemental amount from total product or compound amount. Amount-based thresholds are used only when you identify the basis."}
+                </span>
+              </label>
+            )}
+            <label>
+              Preferred time <span>(optional)</span>
+              <input
+                type="time"
+                value={preferred}
+                onChange={(event) => setPreferred(event.target.value)}
+              />
+            </label>
+          </>
         )}
-        <label>
-          Preferred time <span>(optional)</span>
-          <input
-            type="time"
-            value={preferred}
-            onChange={(event) => setPreferred(event.target.value)}
-          />
-        </label>
       </div>
-      <button onClick={() => void add()}>Add supplement</button>
+      <button onClick={() => void add()} disabled={!catalog}>
+        Add supplement
+      </button>
       <ul className="items">
         {regimen.supplements.map((entry) => (
           <li key={entry.id}>
@@ -886,9 +1014,12 @@ function SupplementForm({
           </li>
         ))}
       </ul>
-      <div className="actions">
+      <div className="actions first-value-actions">
+        <button onClick={() => void onGenerate()} disabled={regimen.supplements.length === 0}>
+          Generate my NutriClock
+        </button>
         <button className="secondary" onClick={onNext}>
-          Continue to medications
+          Add optional medication timing
         </button>
       </div>
     </Step>
@@ -906,7 +1037,7 @@ function MedicationForm({
 }) {
   const [selected, setSelected] = useState(MEDICATION_CATALOG[0]!.id);
   const [name, setName] = useState("");
-  const [timeValue, setTimeValue] = useState("07:00");
+  const [timeValue, setTimeValue] = useState("");
   const add = async () => {
     const catalog = MEDICATION_CATALOG.find((entry) => entry.id === selected);
     const anchor: MedicationAnchor = {
@@ -915,7 +1046,7 @@ function MedicationForm({
       reference: name
         ? { kind: "unsupported", userEnteredName: name }
         : { kind: "supported", medicationId: selected },
-      administrationTime: time(timeValue),
+      ...(timeValue ? { administrationTime: time(timeValue) } : {}),
     };
     await onSave({ ...regimen, medications: [...regimen.medications, anchor] });
     setName("");
@@ -954,7 +1085,7 @@ function MedicationForm({
           />
         </label>
         <label>
-          Existing administration time
+          Usual administration time <span>(optional — ask later if needed)</span>
           <input
             type="time"
             value={timeValue}
@@ -969,7 +1100,10 @@ function MedicationForm({
         {regimen.medications.map((anchor) => (
           <li key={anchor.id}>
             <span>
-              {anchor.displayName} · {formatLocalTime(anchor.administrationTime)} · fixed
+              {anchor.displayName} ·{" "}
+              {anchor.administrationTime
+                ? `${formatLocalTime(anchor.administrationTime)} · fixed`
+                : "time needed before related timing can be resolved"}
             </span>
             <button className="linkbutton" onClick={() => remove(anchor.id)}>
               Remove
@@ -982,6 +1116,98 @@ function MedicationForm({
   );
 }
 
+function ContextQuestionPage({
+  app,
+  refresh,
+}: {
+  app: NutriClockApplication;
+  refresh: () => void;
+}) {
+  const navigate = useNavigate();
+  const question = app.getNextQuestion();
+  const [value, setValue] = useState("");
+  const regimen = app.state.regimen;
+  if (!question || !regimen) {
+    return (
+      <section className="card">
+        <p className="eyebrow">IMPROVE SCHEDULE</p>
+        <h1>No extra detail is needed right now.</h1>
+        <p className="helper">NutriClock has enough information to provide the current guidance.</p>
+        <Link to="/schedule">Return to your NutriClock</Link>
+      </section>
+    );
+  }
+  const answer = async () => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return;
+    const answeredTime = time(value);
+    let next = regimen;
+    if (question.contextKey === "medication_anchor_time") {
+      next = {
+        ...regimen,
+        medications: regimen.medications.map((anchor) =>
+          question.itemIds.includes(anchor.id)
+            ? { ...anchor, administrationTime: answeredTime }
+            : anchor,
+        ),
+      };
+    } else if (question.contextKey === "coffee_time" || question.contextKey === "tea_time") {
+      const kind = question.contextKey === "coffee_time" ? "coffee" : "tea";
+      next = {
+        ...regimen,
+        routine: {
+          ...regimen.routine,
+          beverages: [
+            ...regimen.routine.beverages.filter((event) => event.kind !== kind),
+            { id: `context:${question.id}`, kind, time: answeredTime },
+          ],
+        },
+      };
+    } else {
+      next = {
+        ...regimen,
+        routine: {
+          ...regimen.routine,
+          meals: [
+            ...regimen.routine.meals.filter((meal) => meal.name !== "breakfast"),
+            {
+              id: `context:${question.id}`,
+              name: "breakfast",
+              time: answeredTime,
+              ...(question.contextKey === "dietary_fat_meal" ? { containsDietaryFat: true } : {}),
+            },
+          ],
+        },
+      };
+    }
+    await app.replaceRegimen(next);
+    await app.generate();
+    refresh();
+    navigate("/schedule");
+  };
+  return (
+    <section className="card question-page">
+      <p className="eyebrow">IMPROVE SCHEDULE / ONE QUESTION</p>
+      <h1>{question.prompt}</h1>
+      <p className="helper">{question.reason}</p>
+      <p className="boundary">
+        {question.priority === "hard_context_requirement"
+          ? "This detail is needed to resolve a supported timing constraint."
+          : "This detail is optional and only improves the current timing guidance."}
+      </p>
+      <label>
+        Time
+        <input type="time" value={value} onChange={(event) => setValue(event.target.value)} />
+      </label>
+      <button onClick={() => void answer()} disabled={!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)}>
+        Use this time
+      </button>
+      <p>
+        <Link to="/schedule">Not now</Link>
+      </p>
+    </section>
+  );
+}
+
 function SchedulePage({
   app,
   onGenerate,
@@ -989,8 +1215,15 @@ function SchedulePage({
   app: NutriClockApplication;
   onGenerate: () => Promise<void>;
 }) {
+  const [, setRevision] = useState(0);
   const schedule = app.state.schedule?.schedule;
+  const regimen = app.state.regimen;
   const knowledge = loadKnowledgeSnapshot();
+  useEffect(() => {
+    if (regimen && !schedule) {
+      void app.generate().then(() => setRevision((value) => value + 1));
+    }
+  }, [app, regimen, schedule]);
   return (
     <section className="card">
       <div className="resulthead">
@@ -1008,18 +1241,53 @@ function SchedulePage({
       </p>
       {!schedule && (
         <p>
-          No schedule yet. <Link to="/day">Start with Your Day</Link>
+          No schedule yet. <Link to="/supplements">Start with your supplements</Link>
         </p>
       )}
       {schedule && (
         <>
+          <div className="schedule-status notice" role="status">
+            <h2>
+              {schedule.completeness === "resolved"
+                ? "Your NutriClock is ready."
+                : schedule.completeness === "requires_context"
+                  ? "One detail is needed to resolve a timing constraint."
+                  : schedule.completeness === "conflicted"
+                    ? "This schedule has a conflict NutriClock will not override."
+                    : "Your NutriClock is ready — optional refinements are available."}
+            </h2>
+            <p>
+              {schedule.completeness === "requires_context"
+                ? "The schedule below remains useful where it can, but a fixed medication time is needed before related supplement timing can be exact."
+                : "Timing windows are based on the supported rules and the context you have provided."}
+            </p>
+          </div>
+          {schedule.assumptions.length > 0 && (
+            <div className="assumptions" aria-label="Schedule assumptions">
+              <h2>What NutriClock is assuming</h2>
+              <ul>
+                {schedule.assumptions.map((assumption) => (
+                  <li key={assumption.id}>{assumption.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {schedule.questionCandidates.length > 0 && (
+            <div className="question-card" aria-label="Next useful question">
+              <p className="eyebrow">MINIMUM NECESSARY QUESTION</p>
+              <h2>{schedule.questionCandidates[0]?.prompt}</h2>
+              <p>{schedule.questionCandidates[0]?.reason}</p>
+              <Link className="question-link" to="/improve">
+                Answer this question
+              </Link>
+            </div>
+          )}
           <div className="timeline">
             {schedule.items
-              .filter((item) => item.time)
               .sort((a, b) => (a.time?.minuteOfDay ?? 0) - (b.time?.minuteOfDay ?? 0))
               .map((item) => (
                 <article className={`timelineitem ${item.fixed ? "fixed" : ""}`} key={item.id}>
-                  <div className="time">{item.time && formatLocalTime(item.time)}</div>
+                  <div className="time">{item.time ? formatLocalTime(item.time) : "Window"}</div>
                   <div>
                     <h2>{item.displayName}</h2>
                     <p className="status">
@@ -1029,8 +1297,15 @@ function SchedulePage({
                           ? "Flexible timing"
                           : item.timingState === "user_selected"
                             ? "User-selected timing"
-                            : "Suggested timing"}
+                            : item.timingState === "unresolved"
+                              ? "Waiting for one missing detail"
+                              : "Suggested timing"}
                     </p>
+                    {!item.time && (
+                      <p className="semantic-window">
+                        <span aria-hidden="true">↳</span> {item.semanticWindow.label}
+                      </p>
+                    )}
                     <details>
                       <summary>Why this time?</summary>
                       <ul>
@@ -1038,6 +1313,11 @@ function SchedulePage({
                           <li key={bullet}>{bullet}</li>
                         ))}
                       </ul>
+                      {item.assumptionIds.length > 0 && (
+                        <p className="metadata">
+                          This timing stays relative until the missing context is provided.
+                        </p>
+                      )}
                       {item.explanation.administrationGuidance && (
                         <GuidanceBlock guidance={item.explanation.administrationGuidance} />
                       )}

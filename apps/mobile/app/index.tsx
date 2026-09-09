@@ -16,9 +16,9 @@ export default function Welcome() {
           It does not diagnose conditions or determine which supplements or doses you need.
         </Text>
       </View>
-      <Link href="/day" asChild>
+      <Link href="/supplements" asChild>
         <Pressable accessibilityRole="button" style={styles.button}>
-          <Text style={styles.buttonText}>Build my NutriClock</Text>
+          <Text style={styles.buttonText}>Tell NutriClock what I take</Text>
         </Pressable>
       </Link>
       <Link href="/today" style={styles.link}>
@@ -37,12 +37,12 @@ export default function Welcome() {
 
 export const styles = StyleSheet.create({
   container: { padding: 24, paddingTop: 72, backgroundColor: "#f3f0e8", flexGrow: 1 },
-  eyebrow: { color: "#bb5e3d", fontWeight: "800", letterSpacing: 2, marginBottom: 12 },
+  eyebrow: { color: "#9e4b32", fontWeight: "800", letterSpacing: 2, marginBottom: 12 },
   title: { color: "#123e38", fontSize: 36, lineHeight: 40, fontWeight: "800", marginBottom: 18 },
   body: { color: "#53655e", fontSize: 17, lineHeight: 25, marginBottom: 18 },
   boundary: { borderLeftWidth: 4, borderLeftColor: "#e4a04b", paddingLeft: 14, marginVertical: 12 },
   bold: { fontWeight: "800", color: "#334940" },
-  muted: { color: "#71817a", marginTop: 18 },
+  muted: { color: "#5d6b64", marginTop: 18 },
   button: {
     backgroundColor: "#175f52",
     borderRadius: 28,
@@ -62,5 +62,11 @@ export const styles = StyleSheet.create({
     marginTop: 6,
     color: "#17221f",
   },
-  link: { color: "#175f52", fontWeight: "800", marginVertical: 10 },
+  link: {
+    color: "#175f52",
+    fontWeight: "800",
+    marginVertical: 10,
+    minHeight: 44,
+    paddingVertical: 10,
+  },
 });

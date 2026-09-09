@@ -16,8 +16,8 @@ export default function Routines() {
           <Text style={{ ...styles.title, fontSize: 30, lineHeight: 34 }}>
             Build your NutriClock first
           </Text>
-          <Link href="/day" style={styles.link}>
-            Start with Your Day
+          <Link href="/supplements" style={styles.link}>
+            Start with your supplements
           </Link>
         </View>
       </ScrollView>

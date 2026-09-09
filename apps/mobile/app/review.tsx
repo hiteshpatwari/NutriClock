@@ -36,8 +36,8 @@ export default function Review() {
             Build your NutriClock first
           </Text>
           <Text style={styles.body}>Your local execution review appears after setup.</Text>
-          <Link href="/day" style={styles.link}>
-            Start with Your Day
+          <Link href="/supplements" style={styles.link}>
+            Start with your supplements
           </Link>
         </View>
       </ScrollView>

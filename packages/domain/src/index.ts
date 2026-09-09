@@ -59,10 +59,11 @@ export type SupplementId =
   | "magnesium"
   | "zinc"
   | "folate"
-  | "omega_3";
+  | "omega_3"
+  | "multivitamin";
 
 export type SupplementFormId =
-  "iron_oral_common" | "calcium_carbonate" | "calcium_citrate" | "unspecified";
+  "iron_oral_common" | "calcium_carbonate" | "calcium_citrate" | "opaque_product" | "unspecified";
 
 export interface SupplementCatalogItem {
   id: SupplementId;
@@ -107,7 +108,8 @@ export interface MedicationAnchor {
   id: StableId;
   displayName: string;
   reference: MedicationReference;
-  administrationTime: LocalTime;
+  /** Missing means the user has recorded the medication but not its usual time yet. */
+  administrationTime?: LocalTime;
   userNote?: string;
   explicitAdministrationTimes?: LocalTime[];
 }
@@ -189,7 +191,14 @@ export interface TodayScheduleItem {
 
 export interface AvailabilityDecision {
   itemId: StableId;
-  status: "available_now" | "wait" | "completed" | "skipped" | "unavailable_today";
+  status:
+    | "available_now"
+    | "wait"
+    | "not_now"
+    | "flexible"
+    | "completed"
+    | "skipped"
+    | "unavailable_today";
   nextValidTime?: LocalTime;
   ruleIds: string[];
   evidenceIds: string[];
@@ -201,6 +210,18 @@ export interface AdaptiveScheduleResult {
   schedule: ScheduleResult;
   items: TodayScheduleItem[];
   availability: AvailabilityDecision[];
+}
+
+export interface ScheduleRepairChange {
+  itemId: StableId;
+  kind: "moved" | "preserved" | "completed" | "skipped";
+  message: string;
+}
+
+export interface ScheduleRepairResult {
+  before: ScheduleResult;
+  after: AdaptiveScheduleResult;
+  changes: ScheduleRepairChange[];
 }
 
 export type ScheduleComplexity = "simple" | "moderate" | "complex" | "needs_attention";
@@ -337,6 +358,55 @@ export interface SchedulerOptions {
   traceMode?: "summary" | "full";
   config?: SchedulerConfig;
   temporaryMedicationAnchors?: MedicationAnchor[];
+  /** Internal repair hints; these are never persisted as user preferences. */
+  placementHints?: Record<StableId, LocalTime>;
+}
+
+export type SemanticWindowKind =
+  | "after_waking"
+  | "before_first_meal"
+  | "with_meal"
+  | "between_meals"
+  | "with_dietary_fat_meal"
+  | "away_from_coffee"
+  | "away_from_tea"
+  | "away_from_calcium"
+  | "relative_to_medication"
+  | "with_compatible_item"
+  | "later_in_day"
+  | "flexible";
+
+export interface SemanticTimeWindow {
+  kind: SemanticWindowKind;
+  label: string;
+  resolved: boolean;
+  ruleIds: string[];
+}
+
+export type ScheduleCompleteness =
+  "resolved" | "resolved_with_assumptions" | "refinable" | "requires_context" | "conflicted";
+
+export interface ScheduleAssumption {
+  id: string;
+  message: string;
+  itemIds: StableId[];
+  ruleIds: string[];
+}
+
+export type QuestionPriority =
+  "hard_context_requirement" | "high_value_refinement" | "medium_value_refinement" | "convenience";
+
+export type QuestionContextKey =
+  "medication_anchor_time" | "meal_time" | "dietary_fat_meal" | "coffee_time" | "tea_time";
+
+export interface QuestionCandidate {
+  id: string;
+  prompt: string;
+  priority: QuestionPriority;
+  contextKey: QuestionContextKey;
+  reason: string;
+  itemIds: StableId[];
+  ruleIds: string[];
 }
 
 export interface CandidateRuleEvaluation {
@@ -398,18 +468,24 @@ export interface ScheduleItem {
   sourceId: StableId;
   displayName: string;
   time?: LocalTime;
-  timingState: "scheduled" | "flexible" | "user_selected" | "conflicted";
+  timingState: "scheduled" | "flexible" | "user_selected" | "unresolved" | "conflicted";
   fixed: boolean;
   userSelected: boolean;
   influencingRuleIds: string[];
   evidenceIds: string[];
+  semanticWindow: SemanticTimeWindow;
+  assumptionIds: string[];
   explanation: ScheduleExplanation;
 }
 
 export interface ScheduleConflict {
   id: string;
   kind: "hard_schedule_conflict" | "preference_conflict";
-  reason: "no_hard_valid_candidate" | "bounded_repair_exhausted" | "user_override_rejected";
+  reason:
+    | "no_hard_valid_candidate"
+    | "bounded_repair_exhausted"
+    | "user_override_rejected"
+    | "invalid_context";
   severity: "blocking" | "review";
   itemIds: StableId[];
   ruleIds: string[];
@@ -441,10 +517,13 @@ export interface ScheduleMetadata {
 
 export interface ScheduleResult {
   status: "complete" | "complete_with_conflicts" | "incomplete";
+  completeness: ScheduleCompleteness;
   items: ScheduleItem[];
   warnings: ClinicalWarning[];
   unsupportedMedications: UnsupportedMedicationNotice[];
   conflicts: ScheduleConflict[];
+  assumptions: ScheduleAssumption[];
+  questionCandidates: QuestionCandidate[];
   decisionTraces: ScheduleDecisionTrace[];
   metadata: ScheduleMetadata;
 }
@@ -536,6 +615,14 @@ export const SUPPLEMENT_CATALOG: SupplementCatalogItem[] = [
     supportedUnits: ["mg", "mcg", "g"],
     doseBasisRelevant: false,
   },
+  {
+    id: "multivitamin",
+    displayName: "Generic multivitamin",
+    supportedForms: ["opaque_product"],
+    defaultUnit: "other",
+    supportedUnits: ["other"],
+    doseBasisRelevant: false,
+  },
 ];
 
 export const MEDICATION_CATALOG: Array<{ id: MedicationId; displayName: string }> = [
@@ -580,6 +667,7 @@ export function validateKnowledgeSnapshot(snapshot: KnowledgeSnapshot): Knowledg
     "iron_oral_common",
     "calcium_carbonate",
     "calcium_citrate",
+    "opaque_product",
   ]);
   const doseUnits = new Set<DoseUnit>(["mg", "mcg", "g", "IU", "mL", "other"]);
   const doseBases = new Set<DoseBasis>(["elemental", "product_label_amount", "unknown"]);
@@ -711,6 +799,17 @@ export function validateRegimen(regimen: CanonicalRegimen): { valid: boolean; er
     if (!Number.isFinite(item.dose) || item.dose < 0) errors.push(`${item.id}: invalid dose`);
     if (item.preferredTime) validateTime(`${item.id}.preferredTime`, item.preferredTime);
   }
+  for (const meal of regimen.routine.meals) validateTime(`${meal.id}.mealTime`, meal.time);
+  for (const beverage of regimen.routine.beverages)
+    validateTime(`${beverage.id}.beverageTime`, beverage.time);
+  for (const anchor of regimen.medications) {
+    if (anchor.administrationTime)
+      validateTime(`${anchor.id}.administrationTime`, anchor.administrationTime);
+    for (const [index, time] of (anchor.explicitAdministrationTimes ?? []).entries())
+      validateTime(`${anchor.id}.explicitAdministrationTimes[${index}]`, time);
+  }
+  for (const override of regimen.overrides)
+    validateTime(`${override.id}.selectedTime`, override.selectedTime);
   return { valid: errors.length === 0, errors };
 }
 
@@ -799,6 +898,21 @@ function ruleMatchesSupplementMedication(
   return (direct || reverse) && conditionsMatchForSupplement(rule, item);
 }
 
+function ruleHasPotentialContext(
+  rule: InteractionRule,
+  item: SupplementEntry,
+  regimen: CanonicalRegimen,
+): boolean {
+  if (!conditionsMatchForSupplement(rule, item)) return false;
+  if (rule.sourceId.startsWith("routine:") || rule.targetId.startsWith("routine:"))
+    return matchesSupplement(rule.sourceId, item) || matchesSupplement(rule.targetId, item);
+  if (regimen.medications.some((anchor) => ruleMatchesSupplementMedication(rule, item, anchor)))
+    return true;
+  return regimen.supplements.some(
+    (other) => other.id !== item.id && ruleMatchesSupplementPair(rule, item, other),
+  );
+}
+
 function satisfiesRelation(rule: InteractionRule, source: number, target: number): boolean {
   if (rule.direction === "symmetric") {
     return (
@@ -861,6 +975,7 @@ function candidateTimes(
   item: SupplementEntry,
   regimen: CanonicalRegimen,
   config: SchedulerConfig,
+  placementHint?: LocalTime,
 ): LocalTime[] {
   const end = usableDayMinutes(regimen);
   const times = new Set<number>();
@@ -870,6 +985,7 @@ function candidateTimes(
     if (time && isCandidateInUsableDay(time, regimen)) times.add(eventTimeline(time, regimen));
   };
   add(item.preferredTime);
+  add(placementHint);
   for (const meal of regimen.routine.meals) add(meal.time);
   for (const beverage of regimen.routine.beverages) add(beverage.time);
   const override = regimen.overrides.find((entry) => entry.itemId === item.id);
@@ -923,6 +1039,7 @@ function evaluateCandidate(
   knowledge: KnowledgeSnapshot,
   anchors: InternalPlacement[],
   placed: InternalPlacement[],
+  placementHint?: LocalTime,
 ): { hardValid: boolean; score: Score; influencingRuleIds: string[] } {
   const itemTime = eventTimeline(localTime, regimen);
   let hardValid = true;
@@ -1004,7 +1121,8 @@ function evaluateCandidate(
     }
   }
 
-  const preferred = item.preferredTime ? eventTimeline(item.preferredTime, regimen) : undefined;
+  const preferredTime = item.preferredTime ?? placementHint;
+  const preferred = preferredTime ? eventTimeline(preferredTime, regimen) : undefined;
   const userPreferenceDistance = preferred === undefined ? 0 : Math.abs(preferred - itemTime);
   const newWindowCount = placed.some((entry) => entry.timelineMinute === itemTime) ? 0 : 1;
   return {
@@ -1046,6 +1164,7 @@ function matchingOverride(
 
 function anchorPlacements(regimen: CanonicalRegimen): InternalPlacement[] {
   return regimen.medications.flatMap((anchor) => {
+    if (!anchor.administrationTime) return [];
     const times = anchor.explicitAdministrationTimes ?? [anchor.administrationTime];
     return times.map((time, index) => ({
       itemId: `${anchor.id}:${index}`,
@@ -1061,6 +1180,7 @@ function finalRelationSummary(
   regimen: CanonicalRegimen,
   knowledge: KnowledgeSnapshot,
   allPlacements: InternalPlacement[],
+  placementHint?: LocalTime,
 ): {
   ruleIds: string[];
   evidenceIds: string[];
@@ -1077,9 +1197,14 @@ function finalRelationSummary(
     knowledge,
     anchorPlacements(regimen),
     allPlacements.filter((entry) => entry.itemId !== item.id),
+    placementHint,
   );
-  const rules = activeRules(knowledge).filter((rule) =>
-    evaluated.influencingRuleIds.includes(rule.id),
+  const rules = activeRules(knowledge).filter(
+    (rule) =>
+      rule.classification !== "clinical_warning" &&
+      rule.classification !== "informational" &&
+      (evaluated.influencingRuleIds.includes(rule.id) ||
+        ruleHasPotentialContext(rule, item, regimen)),
   );
   const bullets = rules
     .filter(
@@ -1091,7 +1216,9 @@ function finalRelationSummary(
   const flexible = rules.length === 0;
   if (flexible)
     bullets.push(
-      "No strong evidence-backed timing requirement was identified. Choose a time you're likely to remember.",
+      item.supplementId === "multivitamin"
+        ? "This generic multivitamin is kept as an opaque product. Detailed nutrient-level timing cannot be determined without its ingredient list."
+        : "No strong evidence-backed timing requirement was identified. Choose a time you're likely to remember.",
     );
   const administrationGuidance = deriveAdministrationGuidance(rules);
   return {
@@ -1200,6 +1327,299 @@ function unsupportedNotices(regimen: CanonicalRegimen): UnsupportedMedicationNot
     }));
 }
 
+function ruleAppliesToItemWithoutContext(rule: InteractionRule, item: SupplementEntry): boolean {
+  if (!matchesSupplement(rule.sourceId, item) && !matchesSupplement(rule.targetId, item))
+    return false;
+  return conditionsMatchForSupplement(rule, item);
+}
+
+function hasUnresolvedMedicationContext(
+  item: SupplementEntry,
+  regimen: CanonicalRegimen,
+  knowledge: KnowledgeSnapshot,
+): boolean {
+  return activeRules(knowledge).some((rule) => {
+    if (rule.classification !== "hard_schedule_constraint") return false;
+    if (!ruleAppliesToItemWithoutContext(rule, item)) return false;
+    return regimen.medications.some(
+      (anchor) => ruleMatchesSupplementMedication(rule, item, anchor) && !anchor.administrationTime,
+    );
+  });
+}
+
+function semanticWindowForItem(
+  item: SupplementEntry,
+  summary: { ruleIds: string[]; flexible: boolean },
+  regimen: CanonicalRegimen,
+  knowledge: KnowledgeSnapshot,
+): SemanticTimeWindow {
+  const rules = activeRules(knowledge).filter((rule) => summary.ruleIds.includes(rule.id));
+  const unresolvedMedication = hasUnresolvedMedicationContext(item, regimen, knowledge);
+  if (unresolvedMedication) {
+    return {
+      kind: "relative_to_medication",
+      label: "Relative to a medication anchor",
+      resolved: false,
+      ruleIds: rules.map((rule) => rule.id),
+    };
+  }
+  const hasMedicationRelation = rules.some((rule) =>
+    regimen.medications.some((anchor) => ruleMatchesSupplementMedication(rule, item, anchor)),
+  );
+  if (hasMedicationRelation) {
+    return {
+      kind: "relative_to_medication",
+      label: "Around your fixed medication time",
+      resolved: true,
+      ruleIds: rules.map((rule) => rule.id),
+    };
+  }
+  const routineRule = rules.find((rule) => rule.targetId.startsWith("routine:"));
+  if (routineRule?.targetId === "routine:meal") {
+    if (routineRule.effect === "prefer_meal_characteristic") {
+      return {
+        kind: "with_dietary_fat_meal",
+        label: "With a meal marked as containing dietary fat",
+        resolved: regimen.routine.meals.some((meal) => meal.containsDietaryFat === true),
+        ruleIds: rules.map((rule) => rule.id),
+      };
+    }
+    if (routineRule.effect === "prefer_with_food") {
+      return {
+        kind: "with_meal",
+        label: "With a meal",
+        resolved: regimen.routine.meals.length > 0,
+        ruleIds: rules.map((rule) => rule.id),
+      };
+    }
+    if (routineRule.effect === "prefer_empty_stomach") {
+      return {
+        kind: regimen.routine.meals.length > 0 ? "between_meals" : "before_first_meal",
+        label:
+          regimen.routine.meals.length > 0 ? "Between meals / away from food" : "Away from food",
+        resolved: regimen.routine.meals.length > 0,
+        ruleIds: rules.map((rule) => rule.id),
+      };
+    }
+  }
+  if (rules.some((rule) => rule.targetId === "routine:coffee")) {
+    return {
+      kind: "away_from_coffee",
+      label: "Away from coffee",
+      resolved: regimen.routine.beverages.some((event) => event.kind === "coffee"),
+      ruleIds: rules.map((rule) => rule.id),
+    };
+  }
+  if (rules.some((rule) => rule.targetId === "routine:tea")) {
+    return {
+      kind: "away_from_tea",
+      label: "Away from tea",
+      resolved: regimen.routine.beverages.some((event) => event.kind === "tea"),
+      ruleIds: rules.map((rule) => rule.id),
+    };
+  }
+  if (rules.some((rule) => rule.effect === "prefer_together")) {
+    return {
+      kind: "with_compatible_item",
+      label: "With a compatible regimen item",
+      resolved: true,
+      ruleIds: rules.map((rule) => rule.id),
+    };
+  }
+  return {
+    kind: "flexible",
+    label: "Flexible timing",
+    resolved: !summary.flexible,
+    ruleIds: rules.map((rule) => rule.id),
+  };
+}
+
+function scheduleAssumptions(
+  regimen: CanonicalRegimen,
+  items: SupplementEntry[],
+  knowledge: KnowledgeSnapshot,
+): ScheduleAssumption[] {
+  const assumptions: ScheduleAssumption[] = [];
+  for (const item of items) {
+    const itemRules = activeRules(knowledge).filter((rule) =>
+      ruleAppliesToItemWithoutContext(rule, item),
+    );
+    for (const rule of itemRules) {
+      if (rule.targetId === "routine:coffee" || rule.targetId === "routine:tea") {
+        const kind = rule.targetId === "routine:coffee" ? "coffee" : "tea";
+        if (!regimen.routine.beverages.some((event) => event.kind === kind)) {
+          assumptions.push({
+            id: `missing:${kind}`,
+            message: `Your ${kind} timing is unknown, so this guidance stays conditional. Add it if you want NutriClock to calculate a more exact window.`,
+            itemIds: [item.id],
+            ruleIds: [rule.id],
+          });
+        }
+      }
+      if (rule.targetId === "routine:meal") {
+        const hasRelevantMeal = rule.conditions?.some(
+          (condition) => condition.type === "meal_contains_dietary_fat",
+        )
+          ? regimen.routine.meals.some((meal) => meal.containsDietaryFat === true)
+          : regimen.routine.meals.length > 0;
+        if (!hasRelevantMeal) {
+          assumptions.push({
+            id: `missing:meal:${item.supplementId}`,
+            message:
+              item.supplementId === "vitamin_d3"
+                ? "No meal is marked as containing dietary fat, so Vitamin D3 remains meal-relative until you add that context."
+                : "Meal timing is unknown, so this item remains meal-relative until you add a meal time.",
+            itemIds: [item.id],
+            ruleIds: [rule.id],
+          });
+        }
+      }
+    }
+    for (const anchor of regimen.medications) {
+      if (anchor.administrationTime) continue;
+      const hardRules = activeRules(knowledge).filter(
+        (rule) =>
+          rule.classification === "hard_schedule_constraint" &&
+          ruleMatchesSupplementMedication(rule, item, anchor),
+      );
+      if (hardRules.length) {
+        assumptions.push({
+          id: `missing:medication:${anchor.id}`,
+          message: `When do you normally take ${anchor.displayName}? NutriClock will keep that medication time fixed and arrange compatible supplement windows around it.`,
+          itemIds: [item.id, anchor.id],
+          ruleIds: hardRules.map((rule) => rule.id).sort(),
+        });
+      }
+    }
+  }
+  return [...new Map(assumptions.map((entry) => [entry.id, entry])).values()].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+}
+
+export function generateMinimumNecessaryQuestions(
+  regimen: CanonicalRegimen,
+  schedule: Pick<ScheduleResult, "assumptions">,
+  knowledge: KnowledgeSnapshot,
+): QuestionCandidate[] {
+  const questions: QuestionCandidate[] = [];
+  const assumptionIds = new Set(schedule.assumptions.map((assumption) => assumption.id));
+  const items = regimen.supplements;
+  for (const anchor of regimen.medications) {
+    if (anchor.administrationTime) continue;
+    if (!assumptionIds.has(`missing:medication:${anchor.id}`)) continue;
+    const relatedRules = activeRules(knowledge).filter(
+      (rule) =>
+        rule.classification === "hard_schedule_constraint" &&
+        items.some((item) => ruleMatchesSupplementMedication(rule, item, anchor)),
+    );
+    if (!relatedRules.length) continue;
+    questions.push({
+      id: `question:medication:${anchor.id}`,
+      prompt: `When do you normally take ${anchor.displayName}?`,
+      priority: "hard_context_requirement",
+      contextKey: "medication_anchor_time",
+      reason:
+        "We'll keep your medication time fixed and arrange compatible supplement windows around it.",
+      itemIds: [
+        anchor.id,
+        ...items
+          .filter((item) =>
+            relatedRules.some((rule) => ruleMatchesSupplementMedication(rule, item, anchor)),
+          )
+          .map((item) => item.id),
+      ].sort(),
+      ruleIds: relatedRules.map((rule) => rule.id).sort(),
+    });
+  }
+  for (const item of items) {
+    const rules = activeRules(knowledge).filter((rule) =>
+      ruleAppliesToItemWithoutContext(rule, item),
+    );
+    const coffeeRule = rules.find((rule) => rule.targetId === "routine:coffee");
+    if (
+      coffeeRule &&
+      assumptionIds.has("missing:coffee") &&
+      !regimen.routine.beverages.some((event) => event.kind === "coffee")
+    ) {
+      questions.push({
+        id: "question:coffee",
+        prompt: "When do you normally have coffee?",
+        priority: "high_value_refinement",
+        contextKey: "coffee_time",
+        reason: "This can turn Iron's conditional coffee guidance into a more exact window.",
+        itemIds: [item.id],
+        ruleIds: [coffeeRule.id],
+      });
+    }
+    const teaRule = rules.find((rule) => rule.targetId === "routine:tea");
+    if (
+      teaRule &&
+      assumptionIds.has("missing:tea") &&
+      !regimen.routine.beverages.some((event) => event.kind === "tea")
+    ) {
+      questions.push({
+        id: "question:tea",
+        prompt: "When do you normally have tea?",
+        priority: "high_value_refinement",
+        contextKey: "tea_time",
+        reason: "This can turn Iron's conditional tea guidance into a more exact window.",
+        itemIds: [item.id],
+        ruleIds: [teaRule.id],
+      });
+    }
+    const mealRule = rules.find((rule) => rule.targetId === "routine:meal");
+    if (mealRule) {
+      const needsFat = mealRule.conditions?.some(
+        (condition) => condition.type === "meal_contains_dietary_fat",
+      );
+      const hasMeal = needsFat
+        ? regimen.routine.meals.some((meal) => meal.containsDietaryFat === true)
+        : regimen.routine.meals.length > 0;
+      if (!hasMeal && assumptionIds.has(`missing:meal:${item.supplementId}`)) {
+        questions.push({
+          id: `question:meal:${item.id}`,
+          prompt: needsFat
+            ? "When do you normally have a meal containing dietary fat?"
+            : "When is your usual first meal?",
+          priority: "medium_value_refinement",
+          contextKey: needsFat ? "dietary_fat_meal" : "meal_time",
+          reason: needsFat
+            ? "Vitamin D3 can be placed with a meal you explicitly mark as containing dietary fat."
+            : "Meal timing can make this meal-related guidance more precise.",
+          itemIds: [item.id],
+          ruleIds: [mealRule.id],
+        });
+      }
+    }
+  }
+  const priority: Record<QuestionPriority, number> = {
+    hard_context_requirement: 0,
+    high_value_refinement: 1,
+    medium_value_refinement: 2,
+    convenience: 3,
+  };
+  return [...new Map(questions.map((question) => [question.id, question])).values()].sort(
+    (a, b) =>
+      priority[a.priority] - priority[b.priority] ||
+      a.id.localeCompare(b.id) ||
+      a.itemIds.join(",").localeCompare(b.itemIds.join(",")),
+  );
+}
+
+function completenessFor(
+  status: ScheduleResult["status"],
+  assumptions: ScheduleAssumption[],
+  questions: QuestionCandidate[],
+): ScheduleCompleteness {
+  if (status === "incomplete") return "conflicted";
+  if (questions.some((question) => question.priority === "hard_context_requirement"))
+    return "requires_context";
+  if (questions.length) return "refinable";
+  if (assumptions.length) return "resolved_with_assumptions";
+  return "resolved";
+}
+
 export function generateSchedule(
   input: CanonicalRegimen,
   knowledge: KnowledgeSnapshot,
@@ -1228,6 +1648,7 @@ export function generateSchedule(
   if (!knowledgeValidation.valid) {
     return {
       status: "incomplete",
+      completeness: "conflicted",
       items: [],
       warnings: [],
       unsupportedMedications: [],
@@ -1243,6 +1664,8 @@ export function generateSchedule(
           overridable: false,
         },
       ],
+      assumptions: [],
+      questionCandidates: [],
       decisionTraces: [],
       metadata,
     };
@@ -1250,6 +1673,7 @@ export function generateSchedule(
   if (!validation.valid) {
     return {
       status: "incomplete",
+      completeness: "conflicted",
       items: [],
       warnings: [],
       unsupportedMedications: unsupportedNotices(regimen),
@@ -1265,6 +1689,8 @@ export function generateSchedule(
           overridable: false,
         },
       ],
+      assumptions: [],
+      questionCandidates: [],
       decisionTraces: [],
       metadata,
     };
@@ -1273,12 +1699,15 @@ export function generateSchedule(
   const anchors = anchorPlacements(regimen);
   const warnings = collectWarnings(regimen, knowledge);
   const allItems = [...regimen.supplements];
+  const assumptions = scheduleAssumptions(regimen, allItems, knowledge);
   const candidateCache = new Map<string, LocalTime[]>();
   for (const item of allItems) {
     const override = matchingOverride(item, regimen);
     candidateCache.set(
       item.id,
-      override ? [override.selectedTime] : candidateTimes(item, regimen, config),
+      override
+        ? [override.selectedTime]
+        : candidateTimes(item, regimen, config, options.placementHints?.[item.id]),
     );
   }
   const bestPartial: InternalPlacement[] = [];
@@ -1287,7 +1716,16 @@ export function generateSchedule(
 
   const hardCandidates = (item: SupplementEntry, placed: InternalPlacement[]): LocalTime[] =>
     (candidateCache.get(item.id) ?? []).filter(
-      (time) => evaluateCandidate(item, time, regimen, knowledge, anchors, placed).hardValid,
+      (time) =>
+        evaluateCandidate(
+          item,
+          time,
+          regimen,
+          knowledge,
+          anchors,
+          placed,
+          options.placementHints?.[item.id],
+        ).hardValid,
     );
 
   const chooseNext = (
@@ -1322,7 +1760,15 @@ export function generateSchedule(
     const candidates = hardCandidates(item, placed)
       .map((time) => ({
         time,
-        evaluation: evaluateCandidate(item, time, regimen, knowledge, anchors, placed),
+        evaluation: evaluateCandidate(
+          item,
+          time,
+          regimen,
+          knowledge,
+          anchors,
+          placed,
+          options.placementHints?.[item.id],
+        ),
       }))
       .sort((a, b) =>
         compareScore(
@@ -1389,7 +1835,14 @@ export function generateSchedule(
   for (const placement of chosenPlacements) {
     const item = regimen.supplements.find((entry) => entry.id === placement.itemId);
     if (!item) continue;
-    const summary = finalRelationSummary(item, placement, regimen, knowledge, chosenPlacements);
+    const summary = finalRelationSummary(
+      item,
+      placement,
+      regimen,
+      knowledge,
+      chosenPlacements,
+      options.placementHints?.[item.id],
+    );
     if (summary.strongPenalty > 0 || summary.weakPenalty > 0) {
       const override = matchingOverride(item, regimen);
       const ruleIds = activeRules(knowledge)
@@ -1419,6 +1872,52 @@ export function generateSchedule(
   const traces: ScheduleDecisionTrace[] = [];
   for (const anchor of regimen.medications) {
     const time = anchor.administrationTime;
+    if (!time) {
+      items.push({
+        id: anchor.id,
+        kind: "medication_anchor",
+        sourceId: anchor.id,
+        displayName: anchor.displayName,
+        timingState: "unresolved",
+        fixed: true,
+        userSelected: false,
+        influencingRuleIds: [],
+        evidenceIds: [],
+        semanticWindow: {
+          kind: "relative_to_medication",
+          label: "Medication time needed",
+          resolved: false,
+          ruleIds: [],
+        },
+        assumptionIds: assumptions
+          .filter((assumption) => assumption.itemIds.includes(anchor.id))
+          .map((assumption) => assumption.id),
+        explanation: {
+          title: "Medication time needed",
+          bullets: [
+            "Enter the time you normally take this medication. NutriClock will keep it fixed and schedule supplements around it.",
+          ],
+          ruleIds: [],
+          evidenceIds: [],
+          flexible: false,
+        },
+      });
+      traces.push({
+        itemId: anchor.id,
+        traceMode,
+        consideredCandidateCount: 0,
+        rejectedHardCandidateCount: 0,
+        objective: {
+          strongPenalty: 0,
+          weakPenalty: 0,
+          userPreferenceDistance: 0,
+          newWindowCount: 0,
+        },
+        selectedCandidateReason: "Waiting for the user-entered medication anchor time.",
+        influencingRuleIds: [],
+      });
+      continue;
+    }
     items.push({
       id: anchor.id,
       kind: "medication_anchor",
@@ -1430,6 +1929,13 @@ export function generateSchedule(
       userSelected: true,
       influencingRuleIds: [],
       evidenceIds: [],
+      semanticWindow: {
+        kind: "relative_to_medication",
+        label: "Fixed medication anchor",
+        resolved: true,
+        ruleIds: [],
+      },
+      assumptionIds: [],
       explanation: {
         title: "Your existing medication time",
         bullets: [
@@ -1470,6 +1976,15 @@ export function generateSchedule(
         userSelected: Boolean(matchingOverride(item, regimen)),
         influencingRuleIds: [],
         evidenceIds: [],
+        semanticWindow: {
+          kind: "relative_to_medication",
+          label: "No valid window",
+          resolved: false,
+          ruleIds: [],
+        },
+        assumptionIds: assumptions
+          .filter((assumption) => assumption.itemIds.includes(item.id))
+          .map((assumption) => assumption.id),
         explanation: {
           title: "Schedule conflict",
           bullets: [
@@ -1482,8 +1997,20 @@ export function generateSchedule(
       });
       continue;
     }
-    const summary = finalRelationSummary(item, placement, regimen, knowledge, chosenPlacements);
+    const summary = finalRelationSummary(
+      item,
+      placement,
+      regimen,
+      knowledge,
+      chosenPlacements,
+      options.placementHints?.[item.id],
+    );
     const override = matchingOverride(item, regimen);
+    const semanticWindow = semanticWindowForItem(item, summary, regimen, knowledge);
+    const hasSelectedTime = Boolean(override || item.preferredTime);
+    const unresolvedContext = !semanticWindow.resolved && !hasSelectedTime;
+    const publicTime =
+      unresolvedContext || (summary.flexible && !hasSelectedTime) ? undefined : placement.localTime;
     const itemDisplayName =
       item.userLabel ??
       SUPPLEMENT_CATALOG.find((entry) => entry.id === item.supplementId)?.displayName ??
@@ -1493,12 +2020,24 @@ export function generateSchedule(
       kind: "supplement",
       sourceId: item.id,
       displayName: itemDisplayName,
-      time: placement.localTime,
-      timingState: override ? "user_selected" : summary.flexible ? "flexible" : "scheduled",
+      ...(publicTime ? { time: publicTime } : {}),
+      timingState: override
+        ? "user_selected"
+        : item.preferredTime
+          ? "user_selected"
+          : summary.flexible
+            ? "flexible"
+            : unresolvedContext
+              ? "unresolved"
+              : "scheduled",
       fixed: false,
       userSelected: Boolean(override),
       influencingRuleIds: summary.ruleIds,
       evidenceIds: summary.evidenceIds,
+      semanticWindow,
+      assumptionIds: assumptions
+        .filter((assumption) => assumption.itemIds.includes(item.id))
+        .map((assumption) => assumption.id),
       explanation: {
         title: override
           ? "User-selected timing"
@@ -1523,6 +2062,7 @@ export function generateSchedule(
         knowledge,
         anchors,
         chosenPlacements.filter((entry) => entry.itemId !== item.id),
+        options.placementHints?.[item.id],
       );
       return {
         time,
@@ -1543,6 +2083,7 @@ export function generateSchedule(
       knowledge,
       anchors,
       chosenPlacements.filter((entry) => entry.itemId !== item.id),
+      options.placementHints?.[item.id],
     );
     traces.push({
       itemId: item.id,
@@ -1566,16 +2107,23 @@ export function generateSchedule(
   const uniqueConflicts = [
     ...new Map(conflicts.map((conflict) => [conflict.id, conflict])).values(),
   ].sort((a, b) => a.id.localeCompare(b.id));
+  const status: ScheduleResult["status"] = uniqueConflicts.some(
+    (conflict) => conflict.severity === "blocking",
+  )
+    ? "incomplete"
+    : uniqueConflicts.length
+      ? "complete_with_conflicts"
+      : "complete";
+  const questionCandidates = generateMinimumNecessaryQuestions(regimen, { assumptions }, knowledge);
   return {
-    status: uniqueConflicts.some((conflict) => conflict.severity === "blocking")
-      ? "incomplete"
-      : uniqueConflicts.length
-        ? "complete_with_conflicts"
-        : "complete",
+    status,
+    completeness: completenessFor(status, assumptions, questionCandidates),
     items,
     warnings,
     unsupportedMedications: unsupportedNotices(regimen),
     conflicts: uniqueConflicts,
+    assumptions,
+    questionCandidates,
     decisionTraces: traces.sort((a, b) => a.itemId.localeCompare(b.itemId)),
     metadata,
   };
@@ -1671,11 +2219,86 @@ function applyDayContext(
   return { ...regimen, routine, supplements: remainingSupplements, overrides };
 }
 
+function validateDayContext(context: DayContext): string[] {
+  const errors: string[] = [];
+  const validateTime = (label: string, time: LocalTime | undefined) => {
+    if (
+      !time ||
+      !Number.isInteger(time.minuteOfDay) ||
+      time.minuteOfDay < 0 ||
+      time.minuteOfDay > 1439
+    )
+      errors.push(`${label}: invalid time`);
+  };
+  validateTime("now", context.now);
+  for (const event of context.events) {
+    if (event.kind === "wake_time_changed" || event.kind === "bedtime_changed")
+      validateTime(event.kind, event.time);
+    if (
+      event.kind === "meal_recorded" ||
+      event.kind === "meal_skipped" ||
+      event.kind === "beverage_recorded" ||
+      event.kind === "beverage_skipped" ||
+      event.kind === "medication_taken" ||
+      event.kind === "supplement_taken" ||
+      event.kind === "supplement_skipped" ||
+      event.kind === "supplement_snoozed"
+    )
+      validateTime(`${event.id}.eventTime`, event.time);
+    if (event.kind === "supplement_snoozed") validateTime(`${event.id}.until`, event.until);
+  }
+  return errors;
+}
+
+function invalidAdaptiveSchedule(
+  regimen: CanonicalRegimen,
+  context: DayContext,
+  knowledge: KnowledgeSnapshot,
+  errors: string[],
+): AdaptiveScheduleResult {
+  const baseline = generateSchedule(regimen, knowledge);
+  const conflict: ScheduleConflict = {
+    id: "invalid-day-context",
+    kind: "hard_schedule_conflict",
+    reason: "invalid_context",
+    severity: "blocking",
+    itemIds: [],
+    ruleIds: [],
+    message: `Today's recorded context is invalid, so NutriClock did not evaluate availability. ${errors.join(" ")}`,
+    overridable: false,
+  };
+  const schedule: ScheduleResult = {
+    ...baseline,
+    status: "incomplete",
+    completeness: "conflicted",
+    conflicts: [...baseline.conflicts, conflict].sort((a, b) => a.id.localeCompare(b.id)),
+  };
+  const items = schedule.items.map((item) => ({
+    item,
+    executionStatus: "planned" as const,
+    availableNow: false,
+  }));
+  const availability = items
+    .filter(({ item }) => item.kind === "supplement")
+    .map((entry) => ({
+      itemId: entry.item.sourceId,
+      status: "not_now" as const,
+      ruleIds: entry.item.influencingRuleIds,
+      evidenceIds: entry.item.evidenceIds,
+      message: "Today's context is invalid, so availability was not evaluated.",
+    }));
+  return { context, schedule, items, availability };
+}
+
 function dayItemMessage(item: TodayScheduleItem): string {
   if (item.executionStatus === "taken") return "Recorded as taken.";
   if (item.executionStatus === "skipped")
     return "Recorded as skipped. No make-up dose is suggested.";
   if (item.executionStatus === "snoozed") return "Snoozed until its next user-selected time.";
+  if (item.item.timingState === "flexible")
+    return "Flexible timing. Choose a time you're likely to remember.";
+  if (item.item.timingState === "unresolved")
+    return "One missing context detail is needed before this timing can be resolved.";
   if (item.availableNow) return "This item is available based on your recorded day context.";
   if (item.item.time) return "Next scheduled window: " + formatLocalTime(item.item.time) + ".";
   return "No supported window is currently available today.";
@@ -1687,6 +2310,9 @@ export function generateAdaptiveSchedule(
   knowledge: KnowledgeSnapshot,
   options: SchedulerOptions = {},
 ): AdaptiveScheduleResult {
+  const contextErrors = validateDayContext(context);
+  if (contextErrors.length)
+    return invalidAdaptiveSchedule(regimen, context, knowledge, contextErrors);
   const execution = latestExecutionEvents(context);
   const adaptedRegimen = applyDayContext(regimen, context, knowledge);
   const temporaryMedicationAnchors = context.events
@@ -1697,7 +2323,7 @@ export function generateAdaptiveSchedule(
     .map((event) => {
       const anchor = regimen.medications.find((candidate) => candidate.id === event.anchorId);
       if (!anchor || anchor.reference.kind !== "supported") return undefined;
-      return { ...anchor, administrationTime: event.time };
+      return { ...anchor, administrationTime: event.time } as MedicationAnchor;
     })
     .filter((anchor): anchor is MedicationAnchor => Boolean(anchor));
   const adaptiveOptions = { ...options, temporaryMedicationAnchors };
@@ -1757,7 +2383,11 @@ export function generateAdaptiveSchedule(
       const blockingConflict = nowResult.conflicts.some(
         (conflict) => conflict.severity === "blocking" && conflict.itemIds.includes(supplement.id),
       );
-      availableNow = nowItem?.time?.minuteOfDay === context.now.minuteOfDay && !blockingConflict;
+      availableNow =
+        item.timingState !== "flexible" &&
+        item.timingState !== "unresolved" &&
+        nowItem?.time?.minuteOfDay === context.now.minuteOfDay &&
+        !blockingConflict;
     }
     items.push({
       item,
@@ -1787,6 +2417,22 @@ export function generateAdaptiveSchedule(
         return {
           itemId: todayItem.item.sourceId,
           status: "skipped",
+          ruleIds: todayItem.item.influencingRuleIds,
+          evidenceIds: todayItem.item.evidenceIds,
+          message: dayItemMessage(todayItem),
+        };
+      if (todayItem.item.timingState === "flexible")
+        return {
+          itemId: todayItem.item.sourceId,
+          status: "flexible",
+          ruleIds: todayItem.item.influencingRuleIds,
+          evidenceIds: todayItem.item.evidenceIds,
+          message: dayItemMessage(todayItem),
+        };
+      if (todayItem.item.timingState === "unresolved")
+        return {
+          itemId: todayItem.item.sourceId,
+          status: "not_now",
           ruleIds: todayItem.item.influencingRuleIds,
           evidenceIds: todayItem.item.evidenceIds,
           message: dayItemMessage(todayItem),
@@ -1824,6 +2470,71 @@ export function generateAdaptiveSchedule(
     ),
   };
   return { context, schedule, items, availability };
+}
+
+export function repairSchedule(
+  regimen: CanonicalRegimen,
+  context: DayContext,
+  knowledge: KnowledgeSnapshot,
+  options: SchedulerOptions = {},
+): ScheduleRepairResult {
+  const before = generateSchedule(regimen, knowledge, options);
+  const placementHints = Object.fromEntries(
+    before.items
+      .filter((item) => item.kind === "supplement" && item.time)
+      .map((item) => [item.sourceId, item.time!]),
+  );
+  const after = generateAdaptiveSchedule(regimen, context, knowledge, {
+    ...options,
+    placementHints,
+  });
+  const beforeById = new Map(before.items.map((item) => [item.id, item]));
+  const changes: ScheduleRepairChange[] = [];
+  for (const todayItem of after.items) {
+    const previous = beforeById.get(todayItem.item.id);
+    if (!previous) continue;
+    if (todayItem.executionStatus === "taken") {
+      changes.push({
+        itemId: todayItem.item.sourceId,
+        kind: "completed",
+        message: `${todayItem.item.displayName} is preserved as taken for today.`,
+      });
+      continue;
+    }
+    if (todayItem.executionStatus === "skipped") {
+      changes.push({
+        itemId: todayItem.item.sourceId,
+        kind: "skipped",
+        message: `${todayItem.item.displayName} is preserved as skipped for today.`,
+      });
+      continue;
+    }
+    const previousTime = previous.time?.minuteOfDay;
+    const nextTime = todayItem.item.time?.minuteOfDay;
+    if (previousTime !== nextTime) {
+      changes.push({
+        itemId: todayItem.item.sourceId,
+        kind: "moved",
+        message:
+          nextTime === undefined
+            ? `${todayItem.item.displayName} now has a semantic window: ${todayItem.item.semanticWindow.label}.`
+            : `${todayItem.item.displayName} moved to ${formatLocalTime(todayItem.item.time!)} after the recorded day change.`,
+      });
+    } else if (todayItem.item.fixed) {
+      changes.push({
+        itemId: todayItem.item.sourceId,
+        kind: "preserved",
+        message: `${todayItem.item.displayName} remains at its fixed medication time.`,
+      });
+    }
+  }
+  return {
+    before,
+    after,
+    changes: changes.sort(
+      (a, b) => a.itemId.localeCompare(b.itemId) || a.kind.localeCompare(b.kind),
+    ),
+  };
 }
 
 function addIsoDays(localDate: string, days: number): string {

@@ -8,6 +8,7 @@ import {
   generateAdaptiveSchedule,
   generateSchedule,
   loadKnowledgeSnapshot,
+  repairSchedule,
   type AdaptiveScheduleResult,
   type CanonicalRegimen,
   type ConvenienceInsight,
@@ -19,6 +20,8 @@ import {
   type ScheduleQualitySummary,
   type ScheduleSimplificationComparison,
   type ScheduleResult,
+  type ScheduleRepairResult,
+  type QuestionCandidate,
   type ReminderDecision,
   type RoutineTemplate,
   type UserOverride,
@@ -55,6 +58,9 @@ export interface NutriClockApplication {
   getScheduleQuality(): ScheduleQualitySummary | null;
   getScheduleSimplification(): ScheduleSimplificationComparison | null;
   getReminderDecisions(): ReminderDecision[];
+  getQuestionCandidates(): QuestionCandidate[];
+  getNextQuestion(): QuestionCandidate | null;
+  getScheduleRepair(): ScheduleRepairResult | null;
   getConvenienceInsights(): ConvenienceInsight[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
   saveRoutineTemplate(template: RoutineTemplate): Promise<NutriClockAppState>;
@@ -257,6 +263,18 @@ export function createNutriClockApplication(
     getReminderDecisions() {
       if (!current.regimen || !current.today) return [];
       return buildReminderDecisions(current.today, current.regimen.preferences);
+    },
+    getQuestionCandidates() {
+      if (!current.regimen) return [];
+      const schedule = current.schedule?.schedule ?? generateSchedule(current.regimen, knowledge);
+      return schedule.questionCandidates;
+    },
+    getNextQuestion() {
+      return this.getQuestionCandidates()[0] ?? null;
+    },
+    getScheduleRepair() {
+      if (!current.regimen || !current.today) return null;
+      return repairSchedule(current.regimen, current.today.context, knowledge);
     },
     getConvenienceInsights() {
       if (!current.regimen) return [];

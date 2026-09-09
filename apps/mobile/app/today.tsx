@@ -33,6 +33,7 @@ export default function Today() {
   const [wake, setWake] = useState("07:00");
   const [coffee, setCoffee] = useState("08:00");
   const day = dateKey();
+  const regimen = app.state.regimen;
   useEffect(() => {
     const update = () => {
       const current = nowTime();
@@ -43,8 +44,15 @@ export default function Today() {
     update();
     const timer = setInterval(update, 60_000);
     return () => clearInterval(timer);
-  }, [app, day]);
+  }, [app, day, regimen]);
   const today = app.state.today;
+  const repair = app.getScheduleRepair();
+  const availabilityGroups = [
+    ["available_now", "Take now"],
+    ["wait", "Better to wait"],
+    ["not_now", "Not now"],
+    ["flexible", "Flexible"],
+  ] as const;
   const reminderDecisions = app.getReminderDecisions();
   const remindersEnabled = app.state.regimen?.preferences.remindersEnabled === true;
   const record = async (event: DayEvent) => {
@@ -60,8 +68,8 @@ export default function Today() {
             Build your NutriClock first
           </Text>
           <Text style={styles.body}>Set up your regimen before using Today.</Text>
-          <Link href="/day" style={styles.link}>
-            Start with Your Day
+          <Link href="/supplements" style={styles.link}>
+            Start with your supplements
           </Link>
         </View>
       </ScrollView>
@@ -82,17 +90,37 @@ export default function Today() {
           <Text style={{ color: "#175f52", fontWeight: "800", marginBottom: 6 }}>
             What can I take now?
           </Text>
-          {today?.availability.filter((entry) => entry.status === "available_now").length ? (
-            today.availability
-              .filter((entry) => entry.status === "available_now")
-              .map((entry) => (
-                <Text key={entry.itemId} style={styles.body}>
-                  {today.items.find((item) => item.item.id === entry.itemId)?.item.displayName} is
-                  available based on your recorded day context.
-                </Text>
-              ))
-          ) : (
-            <Text style={styles.body}>No supplement is currently marked available.</Text>
+          {availabilityGroups.map(([status, label]) => {
+            const entries = today?.availability.filter((entry) => entry.status === status) ?? [];
+            if (!entries.length) return null;
+            return (
+              <View
+                key={status}
+                style={{
+                  borderTopWidth: 1,
+                  borderTopColor: "#b4d0bf",
+                  paddingTop: 8,
+                  marginTop: 8,
+                }}
+              >
+                <Text style={{ color: "#175f52", fontWeight: "800" }}>{label}</Text>
+                {entries.map((entry) => (
+                  <Text key={entry.itemId} style={styles.body}>
+                    {today?.items.find((item) => item.item.id === entry.itemId)?.item.displayName}:{" "}
+                    {entry.message}
+                    {entry.nextValidTime
+                      ? ` Next valid time: ${formatLocalTime(entry.nextValidTime)}.`
+                      : ""}
+                  </Text>
+                ))}
+              </View>
+            );
+          })}
+          <Link href="/schedule" style={styles.link}>
+            Open schedule explanations and sources
+          </Link>
+          {!today?.availability.length && (
+            <Text style={styles.body}>No supplement availability decision is ready yet.</Text>
           )}
           <View
             style={{ borderTopWidth: 1, borderTopColor: "#b4d0bf", marginTop: 12, paddingTop: 12 }}
@@ -127,6 +155,24 @@ export default function Today() {
                 ))}
           </View>
         </View>
+        {repair && repair.changes.length > 0 && (
+          <View
+            style={{ backgroundColor: "#fff8e7", padding: 14, borderRadius: 12, marginTop: 14 }}
+          >
+            <Text style={{ color: "#7a4f12", fontWeight: "800", marginBottom: 6 }}>
+              What changed for the rest of today
+            </Text>
+            <Text style={styles.body}>
+              Only remaining items were recalculated; completed items and fixed medication anchors
+              stay preserved.
+            </Text>
+            {repair.changes.map((change) => (
+              <Text key={`${change.itemId}:${change.kind}`} style={styles.body}>
+                {change.message}
+              </Text>
+            ))}
+          </View>
+        )}
         <Text style={styles.label}>Adjust today</Text>
         <TextInput
           accessibilityLabel="New wake time"
@@ -193,7 +239,7 @@ export default function Today() {
             }}
           >
             <Text style={{ color: "#a34d34", fontWeight: "800" }}>
-              {entry.item.time ? formatLocalTime(entry.item.time) : "No window"}
+              {entry.item.time ? formatLocalTime(entry.item.time) : entry.item.semanticWindow.label}
             </Text>
             <Text style={{ color: "#173f38", fontWeight: "800", fontSize: 18 }}>
               {entry.item.displayName}
@@ -211,6 +257,15 @@ export default function Today() {
                         ? "Available now"
                         : "Upcoming"}
             </Text>
+            {entry.item.fixed &&
+              today?.context.events.find(
+                (event) =>
+                  event.kind === "medication_taken" && event.anchorId === entry.item.sourceId,
+              ) && (
+                <Text style={styles.muted}>
+                  Recorded today; the entered medication anchor remains fixed.
+                </Text>
+              )}
             {!entry.item.fixed && entry.executionStatus === "planned" && (
               <View>
                 <Pressable

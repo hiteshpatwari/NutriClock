@@ -3,4 +3,5 @@ dist/
 .vite/
 .expo/
 coverage/
+.playwright-cli/
 *.log

@@ -7,6 +7,7 @@ import {
   compareScheduleSimplification,
   generateSchedule,
   generateAdaptiveSchedule,
+  repairSchedule,
   loadKnowledgeSnapshot,
   normalizeDose,
   SUPPLEMENT_CATALOG,
@@ -122,6 +123,134 @@ describe("approved V1 knowledge", () => {
 });
 
 describe("deterministic scheduler", () => {
+  it("returns useful semantic windows for a supplement-only regimen", () => {
+    const result = generateSchedule(
+      {
+        ...regimen([
+          supplement({ id: id("d3-1"), supplementId: "vitamin_d3", unit: "IU" }),
+          supplement({ id: id("b12-1"), supplementId: "vitamin_b12", unit: "mcg" }),
+          supplement({ id: id("omega-1"), supplementId: "omega_3" }),
+        ]),
+        routine: { wakeTime: t(7), bedtime: t(23), meals: [], beverages: [] },
+      },
+      loadKnowledgeSnapshot(),
+    );
+    expect(result.status).toBe("complete");
+    expect(result.completeness).toBe("refinable");
+    expect(result.items.find((item) => item.id === "b12-1")).toMatchObject({
+      timingState: "flexible",
+      semanticWindow: { kind: "flexible" },
+    });
+    expect(result.items.find((item) => item.id === "b12-1")?.time).toBeUndefined();
+    expect(result.items.find((item) => item.id === "d3-1")).toMatchObject({
+      timingState: "unresolved",
+      semanticWindow: { kind: "with_dietary_fat_meal", resolved: false },
+    });
+    expect(result.items.find((item) => item.id === "d3-1")?.time).toBeUndefined();
+  });
+
+  it("ranks only material missing context and keeps coffee guidance conditional", () => {
+    const result = generateSchedule(
+      {
+        ...regimen([
+          supplement({
+            id: id("iron-1"),
+            supplementId: "iron",
+            formId: "iron_oral_common",
+          }),
+        ]),
+        routine: { wakeTime: t(7), bedtime: t(23), meals: [], beverages: [] },
+      },
+      loadKnowledgeSnapshot(),
+    );
+    expect(result.assumptions.map((assumption) => assumption.id)).toEqual(["missing:meal:iron"]);
+    expect(result.questionCandidates[0]).toMatchObject({
+      id: "question:meal:iron-1",
+      priority: "medium_value_refinement",
+      contextKey: "meal_time",
+    });
+    expect(result.items.find((item) => item.id === "iron-1")?.semanticWindow.kind).toBe(
+      "before_first_meal",
+    );
+  });
+
+  it("resolves a semantic meal window when the user supplies dietary-fat context", () => {
+    const result = generateSchedule(
+      {
+        ...regimen([supplement({ id: id("d3-1"), supplementId: "vitamin_d3", unit: "IU" })]),
+        routine: {
+          wakeTime: t(7),
+          bedtime: t(23),
+          meals: [{ id: id("dinner"), name: "dinner", time: t(18), containsDietaryFat: true }],
+          beverages: [],
+        },
+      },
+      loadKnowledgeSnapshot(),
+    );
+    expect(result.items.find((item) => item.id === "d3-1")).toMatchObject({
+      time: t(18),
+      semanticWindow: { kind: "with_dietary_fat_meal", resolved: true },
+    });
+    expect(result.questionCandidates).toHaveLength(0);
+  });
+
+  it("does not ask a context question for flexible B12 alone", () => {
+    const result = generateSchedule(
+      {
+        ...regimen([supplement({ id: id("b12-1"), supplementId: "vitamin_b12" })]),
+        routine: { wakeTime: t(7), bedtime: t(23), meals: [], beverages: [] },
+      },
+      loadKnowledgeSnapshot(),
+    );
+    expect(result.questionCandidates).toHaveLength(0);
+    expect(result.assumptions).toHaveLength(0);
+  });
+
+  it("requests a missing medication anchor without inventing its time", () => {
+    const input = regimen([
+      supplement({ id: id("iron-1"), supplementId: "iron", formId: "iron_oral_common" }),
+    ]);
+    input.medications = [
+      {
+        id: id("levothyroxine-1"),
+        displayName: "Levothyroxine / Synthroid",
+        reference: { kind: "supported", medicationId: "levothyroxine" },
+      },
+    ];
+    const result = generateSchedule(input, loadKnowledgeSnapshot());
+    expect(result.completeness).toBe("requires_context");
+    expect(result.questionCandidates[0]).toMatchObject({
+      id: "question:medication:levothyroxine-1",
+      priority: "hard_context_requirement",
+    });
+    expect(result.items.find((item) => item.id === "levothyroxine-1")).toMatchObject({
+      fixed: true,
+      timingState: "unresolved",
+    });
+    expect(result.items.find((item) => item.id === "levothyroxine-1")?.time).toBeUndefined();
+    expect(result.items.find((item) => item.id === "iron-1")?.time).toBeUndefined();
+  });
+
+  it("keeps a generic multivitamin opaque while scheduling the rest", () => {
+    const result = generateSchedule(
+      regimen([
+        supplement({
+          id: id("multi-1"),
+          supplementId: "multivitamin",
+          formId: "opaque_product",
+          unit: "other",
+        }),
+        supplement({ id: id("d3-1"), supplementId: "vitamin_d3", unit: "IU" }),
+      ]),
+      loadKnowledgeSnapshot(),
+    );
+    const multivitamin = result.items.find((item) => item.id === "multi-1");
+    expect(multivitamin).toMatchObject({ timingState: "flexible" });
+    expect(multivitamin?.time).toBeUndefined();
+    expect(multivitamin?.explanation.bullets.join(" ")).toContain("opaque product");
+    expect(result.items.find((item) => item.id === "d3-1")).toBeDefined();
+  });
+
   it("keeps a levothyroxine anchor fixed and separates iron by the active 240-minute rule", () => {
     const result = generateSchedule(
       regimen(
@@ -272,6 +401,14 @@ describe("deterministic scheduler", () => {
       true,
     );
     expect(result.conflicts).toHaveLength(0);
+    expect(result.items.find((item) => item.id === "b12-1")).toMatchObject({
+      timingState: "flexible",
+      semanticWindow: { kind: "flexible" },
+    });
+    expect(result.items.find((item) => item.id === "b12-1")?.time).toBeUndefined();
+    expect(
+      result.items.find((item) => item.id === "b12-1")?.explanation.bullets.join(" "),
+    ).toContain("No strong evidence-backed timing requirement");
   });
 
   it("preserves unsupported medication names and applies no inferred rule", () => {
@@ -454,6 +591,41 @@ describe("deterministic scheduler", () => {
     expect(result.items.find((entry) => entry.item.id === "med-1")?.item.time).toEqual(t(7));
     expect(result.schedule.items.find((entry) => entry.id === "iron-1")?.time).toEqual(t(12));
     expect(input.medications[0]?.administrationTime).toEqual(t(7));
+  });
+
+  it("repairs only the remaining day and reports preserved execution state", () => {
+    const input = regimen(
+      [
+        supplement({ id: id("iron-1"), supplementId: "iron", formId: "iron_oral_common" }),
+        supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(12) }),
+      ],
+      [
+        medication({
+          id: id("med-1"),
+          displayName: "Levothyroxine / Synthroid",
+          reference: { kind: "supported", medicationId: "levothyroxine" },
+        }),
+      ],
+    );
+    const repaired = repairSchedule(
+      input,
+      {
+        localDate: "2026-09-08",
+        now: t(12),
+        events: [
+          { id: "taken", kind: "supplement_taken", itemId: "iron-1", time: t(11) },
+          { id: "late-med", kind: "medication_taken", anchorId: "med-1", time: t(8) },
+        ],
+      },
+      loadKnowledgeSnapshot(),
+    );
+    expect(repaired.after.items.find((item) => item.item.id === "iron-1")?.executionStatus).toBe(
+      "taken",
+    );
+    expect(repaired.after.items.find((item) => item.item.id === "med-1")?.item.time).toEqual(t(7));
+    expect(repaired.changes).toContainEqual(
+      expect.objectContaining({ itemId: "iron-1", kind: "completed" }),
+    );
   });
 
   it("does not report an item as available now when the current time violates a hard anchor", () => {

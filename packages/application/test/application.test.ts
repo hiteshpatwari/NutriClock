@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createNutriClockApplication } from "../src";
-import { loadKnowledgeSnapshot, type CanonicalRegimen } from "@nutriclock/domain";
+import {
+  loadKnowledgeSnapshot,
+  type CanonicalRegimen,
+  type SupplementEntry,
+} from "@nutriclock/domain";
 import { decodeState, type RegimenRepository } from "@nutriclock/persistence";
 
 const emptyRegimen: CanonicalRegimen = {
@@ -34,6 +38,27 @@ function memoryRepository(
 }
 
 describe("application orchestration", () => {
+  it("exposes the next minimum-context question without persisting a derived schedule", async () => {
+    const repository = memoryRepository();
+    const app = createNutriClockApplication(repository);
+    const d3: SupplementEntry = {
+      id: "d3-1",
+      supplementId: "vitamin_d3",
+      formId: "unspecified",
+      dose: 1000,
+      unit: "IU",
+      doseBasis: "unknown",
+      frequency: { kind: "once_daily" },
+    };
+    await app.replaceRegimen({ ...emptyRegimen, supplements: [d3] });
+
+    const question = app.getNextQuestion();
+
+    expect(question?.contextKey).toBe("dietary_fat_meal");
+    expect(app.state.schedule).toBeNull();
+    expect(JSON.parse(repository.value ?? "null").schedule).toBeUndefined();
+  });
+
   it("persists only canonical regimen and version metadata when deriving a schedule", async () => {
     const repository = memoryRepository();
     const app = createNutriClockApplication(repository);
@@ -98,6 +123,38 @@ describe("application orchestration", () => {
       daysWithActivity: 1,
     });
     expect(app.getScheduleQuality()?.complexity).toBe("simple");
+  });
+
+  it("derives a local schedule-repair summary from today's events", async () => {
+    const repository = memoryRepository();
+    const app = createNutriClockApplication(repository);
+    const b12: SupplementEntry = {
+      id: "b12-1",
+      supplementId: "vitamin_b12",
+      formId: "unspecified",
+      dose: 1,
+      unit: "mcg",
+      doseBasis: "unknown",
+      frequency: { kind: "once_daily" },
+    };
+    await app.replaceRegimen({ ...emptyRegimen, supplements: [b12] });
+    app.loadToday("2026-09-08", { minuteOfDay: 600 });
+    await app.recordDayEvent(
+      "2026-09-08",
+      { minuteOfDay: 600 },
+      {
+        id: "b12-taken",
+        kind: "supplement_taken",
+        itemId: "b12-1",
+        time: { minuteOfDay: 600 },
+      },
+    );
+
+    expect(app.getScheduleRepair()?.changes).toContainEqual({
+      itemId: "b12-1",
+      kind: "completed",
+      message: "Vitamin B12 is preserved as taken for today.",
+    });
   });
 
   it("saves and applies local routine templates without changing supplements or medications", async () => {
