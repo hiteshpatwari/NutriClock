@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeRules,
+  buildRegimenDependencyGraph,
   generateAdaptiveSchedule,
   generateSchedule,
   repairSchedule,
@@ -425,5 +426,80 @@ describe("V2 rule regression matrix", () => {
       ]),
     );
     expect(result.conflicts).toHaveLength(0);
+  });
+});
+
+describe("regimen dependency graph", () => {
+  it("surfaces active supported relationships with deterministic evidence links", () => {
+    const graph = buildRegimenDependencyGraph(
+      regimen([
+        supplement({ id: "iron", supplementId: "iron", formId: "iron_oral_common" }),
+        supplement({ id: "c", supplementId: "vitamin_c" }),
+      ]),
+      knowledge,
+    );
+
+    expect(graph.nodes.map((node) => node.id)).toEqual(["c", "iron"]);
+    expect(graph.dependencies).toHaveLength(1);
+    expect(graph.dependencies[0]).toMatchObject({
+      id: "iron_vitamin_c_together:c:iron",
+      relation: "take_together",
+      ruleIds: ["iron_vitamin_c_together"],
+    });
+    expect(graph.dependencies[0]?.evidenceIds).toEqual(
+      expect.arrayContaining(["ev_nih_vitamin_c_hp"]),
+    );
+    for (const dependency of graph.dependencies) {
+      expect(dependency.evidenceIds.every((id) => knowledge.evidence[id])).toBe(true);
+    }
+  });
+
+  it("keeps review-required rules and unsupported medications out of inferred relationships", () => {
+    const graph = buildRegimenDependencyGraph(
+      regimen(
+        [
+          supplement({ id: "iron", supplementId: "iron", formId: "iron_oral_common" }),
+          supplement({ id: "calcium", supplementId: "calcium", formId: "calcium_citrate" }),
+        ],
+        [
+          medication({
+            id: "unknown",
+            displayName: "Unknown medication",
+            reference: { kind: "unsupported", userEnteredName: "Unknown medication" },
+          }),
+        ],
+      ),
+      knowledge,
+    );
+
+    expect(graph.unsupportedMedicationIds).toEqual(["unknown"]);
+    expect(graph.nodes.map((node) => node.id)).toContain("unknown");
+    expect(graph.dependencies).toHaveLength(0);
+    expect(graph.scopeNotice).toContain("not evidence that no interaction exists");
+  });
+
+  it("represents warning relationships without turning them into separation constraints", () => {
+    const graph = buildRegimenDependencyGraph(
+      regimen(
+        [supplement({ id: "b12", supplementId: "vitamin_b12" })],
+        [
+          medication({
+            id: "ppi",
+            displayName: "PPI",
+            reference: { kind: "supported", medicationId: "proton_pump_inhibitor" },
+          }),
+        ],
+      ),
+      knowledge,
+    );
+
+    expect(graph.dependencies).toHaveLength(1);
+    expect(graph.dependencies[0]).toMatchObject({
+      relation: "clinical_warning",
+      ruleIds: ["vitamin_b12_ppi_warning"],
+    });
+    expect(graph.dependencies[0]).not.toHaveProperty("minimumSeparationMinutes");
+    expect(graph.dependencies[0]).not.toHaveProperty("sourceBeforeTargetMinutes");
+    expect(graph.dependencies[0]).not.toHaveProperty("targetBeforeSourceMinutes");
   });
 });

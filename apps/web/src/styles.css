@@ -661,6 +661,57 @@ select:focus-visible {
   font-weight: 800;
   color: #175f52;
 }
+.dependency-list {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0;
+}
+.dependency-card {
+  padding: 18px;
+  border: 1px solid #b4d0bf;
+  border-radius: 14px;
+  background: #f1f7f3;
+}
+.dependency-card.keep_apart {
+  border-color: #e4bf6a;
+  background: #fffaf0;
+}
+.dependency-card.clinical_warning {
+  border-color: #e1a39a;
+  background: #fff5d8;
+}
+.dependency-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.dependency-relation {
+  color: #175f52;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dependency-kind {
+  color: #6f7e77;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+.dependency-card h2 {
+  margin: 8px 0;
+  color: #173f38;
+  font-size: 1.2rem;
+}
+.dependency-card p {
+  margin: 6px 0;
+}
+.dependency-meta {
+  color: #7c4c18;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
 .semantic-window {
   margin: 4px 0;
   color: #175f52;

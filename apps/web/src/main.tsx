@@ -15,6 +15,7 @@ import {
   type LocalTime,
   type MealName,
   type MedicationAnchor,
+  type RegimenDependencyGraph,
   type RoutineTemplate,
   type SupplementEntry,
   type SupplementFormId,
@@ -128,6 +129,7 @@ function Layout() {
             <Link to="/supplements">Supplements</Link>
             <Link to="/medications">Medications</Link>
             <Link to="/schedule">Your NutriClock</Link>
+            <Link to="/together">Together?</Link>
             <Link to="/settings">Settings</Link>
           </nav>
         </header>
@@ -175,6 +177,7 @@ function Layout() {
             }
           />
           <Route path="/schedule" element={<SchedulePage app={app} onGenerate={generate} />} />
+          <Route path="/together" element={<TogetherPage app={app} />} />
           <Route path="/improve" element={<ContextQuestionPage app={app} refresh={refresh} />} />
           <Route
             path="/schedule/adjust"
@@ -1626,6 +1629,110 @@ function SchedulePage({
           </p>
         </>
       )}
+    </section>
+  );
+}
+
+function TogetherPage({ app }: { app: NutriClockApplication }) {
+  const graph = app.getRegimenDependencyGraph();
+  const knowledge = loadKnowledgeSnapshot();
+  if (!graph) {
+    return (
+      <section className="card">
+        <p className="eyebrow">REGIMEN RELATIONSHIPS</p>
+        <h1>Can I take these together?</h1>
+        <p className="helper">
+          Add what you take first and NutriClock will check the supported relationships.
+        </p>
+        <Link to="/supplements">Build my NutriClock</Link>
+      </section>
+    );
+  }
+
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const relationLabels: Record<RegimenDependencyGraph["dependencies"][number]["relation"], string> =
+    {
+      take_together: "Supported together",
+      keep_apart: "Keep apart",
+      clinical_warning: "Clinical warning",
+      informational: "Information",
+    };
+  const unsupportedNames = graph.unsupportedMedicationIds
+    .map((id) => nodeById.get(id)?.displayName)
+    .filter((name): name is string => Boolean(name));
+
+  return (
+    <section className="card">
+      <p className="eyebrow">REGIMEN RELATIONSHIPS</p>
+      <h1>Can I take these together?</h1>
+      <p className="helper">
+        A quick view of timing relationships in your regimen. This does not recommend doses or
+        replace your medication instructions.
+      </p>
+      <div className="notice" role="status">
+        <p>{graph.scopeNotice}</p>
+      </div>
+      {unsupportedNames.length > 0 && (
+        <div className="warning" role="status">
+          <h2>Some medication coverage is limited</h2>
+          <p>
+            {unsupportedNames.join(", ")}: no name-based interaction was inferred. Supported
+            relationships for the rest of your regimen remain available.
+          </p>
+        </div>
+      )}
+      {graph.dependencies.length > 0 ? (
+        <div className="dependency-list" aria-label="Supported regimen relationships">
+          {graph.dependencies.map((dependency) => {
+            const source = nodeById.get(dependency.sourceNodeId);
+            const target = nodeById.get(dependency.targetNodeId);
+            if (!source || !target) return null;
+            return (
+              <article className={`dependency-card ${dependency.relation}`} key={dependency.id}>
+                <div className="dependency-heading">
+                  <span className="dependency-relation">{relationLabels[dependency.relation]}</span>
+                  <span className="dependency-kind">
+                    {dependency.classification.replaceAll("_", " ")}
+                  </span>
+                </div>
+                <h2>
+                  {source.displayName} <span aria-hidden="true">+</span> {target.displayName}
+                </h2>
+                <p>{dependency.message}</p>
+                {dependency.minimumSeparationMinutes !== undefined && (
+                  <p className="dependency-meta">
+                    Minimum supported separation: {dependency.minimumSeparationMinutes} minutes.
+                  </p>
+                )}
+                <div className="source">
+                  <span>Evidence: </span>
+                  {dependency.evidenceIds.map((id) => {
+                    const evidence = knowledge.evidence[id];
+                    return evidence ? (
+                      <a key={id} href={evidence.url} target="_blank" rel="noreferrer">
+                        {evidence.title}
+                      </a>
+                    ) : (
+                      <span key={id}>{id}</span>
+                    );
+                  })}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="assumptions">
+          <h2>No active relationship found for these items</h2>
+          <p>
+            NutriClock has no active, evidence-resolved relationship to show for the current
+            regimen. This is not evidence that no interaction exists.
+          </p>
+        </div>
+      )}
+      <p>
+        <Link to="/schedule">View your schedule</Link>
+      </p>
     </section>
   );
 }

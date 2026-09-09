@@ -146,6 +146,9 @@ export default function Schedule() {
         <Link href="/schedule-adjust" style={styles.link}>
           Adjust a supplement time
         </Link>
+        <Link href="/together" style={styles.link}>
+          Can I take these together?
+        </Link>
         <Link href="/today" style={styles.link}>
           Open Today
         </Link>

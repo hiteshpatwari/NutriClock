@@ -2,6 +2,7 @@ import {
   canonicalizeRegimen,
   assessScheduleQuality,
   buildConvenienceInsights,
+  buildRegimenDependencyGraph,
   buildReminderDecisions,
   buildWeeklyReview,
   deriveConveniencePreferences,
@@ -27,6 +28,7 @@ import {
   type QuestionCandidate,
   type ReminderDecision,
   type RoutineTemplate,
+  type RegimenDependencyGraph,
   type UserOverride,
   type WeeklyReviewSummary,
   type WhatCanITakeNowResult,
@@ -67,6 +69,7 @@ export interface NutriClockApplication {
   getNextQuestion(): QuestionCandidate | null;
   getScheduleRepair(): ScheduleRepairResult | null;
   getWhatCanITakeNow(): WhatCanITakeNowResult | null;
+  getRegimenDependencyGraph(): RegimenDependencyGraph | null;
   getConvenienceInsights(): ConvenienceInsight[];
   getConveniencePreferences(): ConveniencePreference[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
@@ -309,6 +312,10 @@ export function createNutriClockApplication(
       return queryWhatCanITakeNow(current.regimen, current.today.context, knowledge, {
         conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
       });
+    },
+    getRegimenDependencyGraph() {
+      if (!current.regimen) return null;
+      return buildRegimenDependencyGraph(current.regimen, knowledge);
     },
     getConvenienceInsights() {
       if (!current.regimen) return [];

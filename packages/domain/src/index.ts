@@ -260,6 +260,38 @@ export interface WhatCanITakeNowResult {
   medicationStatus: MedicationDayStatus[];
 }
 
+export type RegimenDependencyRelation =
+  "take_together" | "keep_apart" | "clinical_warning" | "informational";
+
+export interface RegimenDependencyNode {
+  id: StableId;
+  kind: "supplement" | "medication";
+  displayName: string;
+}
+
+export interface RegimenDependency {
+  id: string;
+  sourceNodeId: StableId;
+  targetNodeId: StableId;
+  nodeIds: StableId[];
+  relation: RegimenDependencyRelation;
+  classification: RuleClassification;
+  direction: RuleDirection;
+  message: string;
+  ruleIds: string[];
+  evidenceIds: string[];
+  minimumSeparationMinutes?: number;
+  sourceBeforeTargetMinutes?: number;
+  targetBeforeSourceMinutes?: number;
+}
+
+export interface RegimenDependencyGraph {
+  nodes: RegimenDependencyNode[];
+  dependencies: RegimenDependency[];
+  unsupportedMedicationIds: StableId[];
+  scopeNotice: string;
+}
+
 export type ScheduleComplexity = "simple" | "moderate" | "complex" | "needs_attention";
 
 export interface ScheduleQualitySummary {
@@ -1379,6 +1411,93 @@ function unsupportedNotices(regimen: CanonicalRegimen): UnsupportedMedicationNot
       message:
         "We don't currently have validated timing rules for this medication. Continue following your pharmacist or clinician's instructions.",
     }));
+}
+
+function dependencyRelation(rule: InteractionRule): RegimenDependencyRelation | undefined {
+  if (rule.effect === "prefer_together") return "take_together";
+  if (rule.effect === "prefer_separation" || rule.effect === "require_separation")
+    return "keep_apart";
+  if (rule.classification === "clinical_warning") return "clinical_warning";
+  if (rule.classification === "informational") return "informational";
+  return undefined;
+}
+
+/** Build the active, evidence-backed relationships present in the user's current regimen. */
+export function buildRegimenDependencyGraph(
+  regimen: CanonicalRegimen,
+  knowledge: KnowledgeSnapshot,
+): RegimenDependencyGraph {
+  const nodes: RegimenDependencyNode[] = [
+    ...regimen.supplements.map((item) => ({
+      id: item.id,
+      kind: "supplement" as const,
+      displayName: supplementDisplayName(item),
+    })),
+    ...regimen.medications.map((item) => ({
+      id: item.id,
+      kind: "medication" as const,
+      displayName: item.displayName,
+    })),
+  ].sort((a, b) => a.id.localeCompare(b.id));
+  const dependencies: RegimenDependency[] = [];
+  const rules = activeRules(knowledge).sort((a, b) => a.id.localeCompare(b.id));
+  const addDependency = (rule: InteractionRule, sourceNodeId: StableId, targetNodeId: StableId) => {
+    const relation = dependencyRelation(rule);
+    if (!relation) return;
+    const nodeIds = [sourceNodeId, targetNodeId].sort((a, b) => a.localeCompare(b));
+    dependencies.push({
+      id: `${rule.id}:${nodeIds.join(":")}`,
+      sourceNodeId,
+      targetNodeId,
+      nodeIds,
+      relation,
+      classification: rule.classification,
+      direction: rule.direction,
+      message: rule.userMessage,
+      ruleIds: [rule.id],
+      evidenceIds: [...rule.evidenceIds].sort(),
+      ...(rule.minimumSeparationMinutes === undefined
+        ? {}
+        : { minimumSeparationMinutes: rule.minimumSeparationMinutes }),
+      ...(rule.sourceBeforeTargetMinutes === undefined
+        ? {}
+        : { sourceBeforeTargetMinutes: rule.sourceBeforeTargetMinutes }),
+      ...(rule.targetBeforeSourceMinutes === undefined
+        ? {}
+        : { targetBeforeSourceMinutes: rule.targetBeforeSourceMinutes }),
+    });
+  };
+
+  for (const rule of rules) {
+    if (!dependencyRelation(rule)) continue;
+    for (const item of regimen.supplements) {
+      for (const other of regimen.supplements) {
+        if (item.id >= other.id || !ruleMatchesSupplementPair(rule, item, other)) continue;
+        const sourceIsItem = matchesSupplement(rule.sourceId, item);
+        addDependency(rule, sourceIsItem ? item.id : other.id, sourceIsItem ? other.id : item.id);
+      }
+      for (const medication of regimen.medications) {
+        if (!ruleMatchesSupplementMedication(rule, item, medication)) continue;
+        const sourceIsItem = matchesSupplement(rule.sourceId, item);
+        addDependency(
+          rule,
+          sourceIsItem ? item.id : medication.id,
+          sourceIsItem ? medication.id : item.id,
+        );
+      }
+    }
+  }
+
+  return {
+    nodes,
+    dependencies: dependencies.sort((a, b) => a.id.localeCompare(b.id)),
+    unsupportedMedicationIds: regimen.medications
+      .filter((medication) => medication.reference.kind === "unsupported")
+      .map((medication) => medication.id)
+      .sort(),
+    scopeNotice:
+      "This view reflects only active, evidence-resolved rules in the current NutriClock knowledge set. No listed relationship is not evidence that no interaction exists.",
+  };
 }
 
 function ruleAppliesToItemWithoutContext(rule: InteractionRule, item: SupplementEntry): boolean {
