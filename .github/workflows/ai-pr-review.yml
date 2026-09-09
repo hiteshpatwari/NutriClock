@@ -1,0 +1,324 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types:
+      - assigned
+      - review_requested
+      - synchronize
+      - ready_for_review
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Decide whether this PR should be reviewed
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const action = context.payload.action;
+            const pr = context.payload.pull_request;
+
+            const targetUser = "hiteshpatwari";
+            const watchedTeams = [].map(v => v.toLowerCase());
+
+            const owner = context.repo.owner;
+
+            const assignees = (pr.assignees || []).map(u => u.login.toLowerCase());
+            const requestedReviewers = (pr.requested_reviewers || []).map(u => u.login.toLowerCase());
+            const requestedTeams = (pr.requested_teams || []).map(t => `${owner}/${t.slug}`.toLowerCase());
+
+            const eventAssignee = context.payload.assignee?.login?.toLowerCase();
+            const eventRequestedReviewer = context.payload.requested_reviewer?.login?.toLowerCase();
+            const eventRequestedTeam = context.payload.requested_team
+              ? `${owner}/${context.payload.requested_team.slug}`.toLowerCase()
+              : undefined;
+
+            let shouldReview = false;
+            let reason = "";
+
+            if (action === "assigned") {
+              shouldReview = eventAssignee === targetUser;
+              reason = shouldReview ? "direct-assignee" : "";
+            } else if (action === "review_requested") {
+              if (eventRequestedReviewer) {
+                shouldReview = eventRequestedReviewer === targetUser;
+                reason = shouldReview ? "direct-review-request" : "";
+              } else if (eventRequestedTeam) {
+                shouldReview = watchedTeams.includes(eventRequestedTeam);
+                reason = shouldReview ? "watched-team-review-request" : "";
+              } else if (requestedReviewers.includes(targetUser)) {
+                shouldReview = true;
+                reason = "direct-review-request";
+              } else if (requestedTeams.some(t => watchedTeams.includes(t))) {
+                shouldReview = true;
+                reason = "watched-team-review-request";
+              }
+            } else if (["ready_for_review", "reopened"].includes(action)) {
+              if (assignees.includes(targetUser)) {
+                shouldReview = true;
+                reason = "direct-assignee";
+              } else if (requestedReviewers.includes(targetUser)) {
+                shouldReview = true;
+                reason = "direct-review-request";
+              } else if (requestedTeams.some(t => watchedTeams.includes(t))) {
+                shouldReview = true;
+                reason = "watched-team-review-request";
+              }
+            } else if (action === "synchronize") {
+              if (assignees.includes(targetUser)) {
+                shouldReview = true;
+                reason = "direct-assignee-sync";
+              } else if (requestedReviewers.includes(targetUser)) {
+                shouldReview = true;
+                reason = "direct-review-request-sync";
+              } else if (requestedTeams.some(t => watchedTeams.includes(t))) {
+                shouldReview = true;
+                reason = "watched-team-review-request-sync";
+              }
+            }
+
+            core.setOutput("should_review", shouldReview ? "true" : "false");
+            core.setOutput("reason", reason);
+            core.setOutput("pull_number", String(pr.number));
+            core.setOutput("head_sha", pr.head.sha);
+
+      - name: Skip if not relevant
+        if: steps.gate.outputs.should_review != 'true'
+        run: echo "PR not relevant to configured reviewer."
+
+      - name: Checkout workflow repo
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch PR files and metadata
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pull_number = Number("${{ steps.gate.outputs.pull_number }}");
+
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number
+            });
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number,
+              per_page: 100
+            });
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pull_number,
+              per_page: 100
+            });
+
+            const fs = require('fs');
+            fs.writeFileSync('pr.json', JSON.stringify(pr.data, null, 2));
+            fs.writeFileSync('pr-files.json', JSON.stringify(files, null, 2));
+            fs.writeFileSync('pr-comments.json', JSON.stringify(comments, null, 2));
+
+      - name: Run AI review
+        if: steps.gate.outputs.should_review == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-4.1-mini
+          REVIEW_REASON: ${{ steps.gate.outputs.reason }}
+          HEAD_SHA: ${{ steps.gate.outputs.head_sha }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+
+          const pr = JSON.parse(fs.readFileSync('pr.json', 'utf8'));
+          const files = JSON.parse(fs.readFileSync('pr-files.json', 'utf8'));
+          const comments = JSON.parse(fs.readFileSync('pr-comments.json', 'utf8'));
+
+          const marker = `<!-- reviewer-bot:summary sha=${process.env.HEAD_SHA} -->`;
+          const alreadyCommented = comments.some(c => (c.body || '').includes(marker));
+
+          if (alreadyCommented) {
+            fs.writeFileSync('review-output.json', JSON.stringify({ skip: true }, null, 2));
+            process.exit(0);
+          }
+
+          const prioritized = files
+            .map(f => {
+              let score = 0;
+              if (/(auth|security|payment|billing|route|router|migration|infra|deploy)/i.test(f.filename)) score += 50;
+              if (/\.(ts|tsx|js|jsx|py|rb|go|java|kt|swift|cs)$/i.test(f.filename)) score += 20;
+              if (f.patch) score += 10;
+              if ((f.changes || 0) > 0 && (f.changes || 0) < 400) score += 10;
+              if (/package-lock\.json|yarn\.lock|pnpm-lock\.yaml|dist\/|build\//i.test(f.filename)) score -= 25;
+              return {
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                changes: f.changes,
+                patch: (f.patch || '').slice(0, 4000),
+                score
+              };
+            })
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 20);
+
+          const prompt = [
+            "You are a careful senior engineer reviewing a pull request.",
+            "Focus on correctness, regressions, edge cases, tests, maintainability, security, and operational risk.",
+            "Only make inline comments when a finding is specific, actionable, and clearly supported by the diff.",
+            "Do not invent file paths or line numbers.",
+            "If uncertain, put the concern in summary instead of inline comments.",
+            "Do not approve automatically.",
+            `Triggered because: ${process.env.REVIEW_REASON}`,
+            `PR title: ${pr.title}`,
+            `PR body: ${pr.body || "(empty)"}`,
+            "Changed files:",
+            JSON.stringify(prioritized, null, 2),
+            "Return valid JSON matching this shape:",
+            JSON.stringify({
+              summary: "string",
+              overall_risk: "low|medium|high",
+              summary_findings: [{ title: "string", body: "string", confidence: 0.9 }],
+              inline_comments: [{ path: "src/file.ts", body: "comment", line: 12, confidence: 0.95 }]
+            }, null, 2)
+          ].join("\n\n");
+
+          async function main() {
+            const response = await fetch("https://api.openai.com/v1/responses", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: process.env.OPENAI_MODEL,
+                input: prompt
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error(await response.text());
+            }
+
+            const data = await response.json();
+            const parsed = JSON.parse(data.output_text || "{}");
+
+            const changedFiles = new Set(prioritized.map(f => f.filename));
+            const inline_comments = (parsed.inline_comments || []).filter(c =>
+              c &&
+              changedFiles.has(c.path) &&
+              typeof c.line === "number" &&
+              c.confidence >= 0.9
+            );
+
+            const summary_findings = (parsed.summary_findings || []).filter(f =>
+              f &&
+              typeof f.confidence === "number" &&
+              f.confidence >= 0.75
+            );
+
+            fs.writeFileSync("review-output.json", JSON.stringify({
+              skip: false,
+              summary: parsed.summary || "AI review completed.",
+              overall_risk: parsed.overall_risk || "medium",
+              summary_findings,
+              inline_comments,
+              marker
+            }, null, 2));
+          }
+
+          main().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Post summary comment
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('review-output.json', 'utf8'));
+            if (result.skip) {
+              core.info('Skipping summary comment because one already exists for this SHA.');
+              return;
+            }
+
+            const findings = (result.summary_findings || [])
+              .map(f => `- **${f.title}**: ${f.body}`)
+              .join('\n');
+
+            const body = [
+              '## reviewer-bot summary',
+              '',
+              `**Overall risk:** ${result.overall_risk}`,
+              '',
+              result.summary,
+              '',
+              '### Findings',
+              findings || '- No high-confidence summary findings.',
+              '',
+              result.marker
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number("${{ steps.gate.outputs.pull_number }}"),
+              body
+            });
+
+      - name: Post inline review comments
+        if: steps.gate.outputs.should_review == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('review-output.json', 'utf8'));
+            if (result.skip) {
+              core.info('Skipping inline comments because summary already exists for this SHA.');
+              return;
+            }
+
+            const comments = (result.inline_comments || []).map(c => ({
+              path: c.path,
+              body: c.body,
+              line: c.line
+            }));
+
+            if (comments.length === 0) {
+              core.info('No inline comments to post.');
+              return;
+            }
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number("${{ steps.gate.outputs.pull_number }}"),
+              event: 'COMMENT',
+              commit_id: "${{ steps.gate.outputs.head_sha }}",
+              body: 'AI inline review findings',
+              comments
+            });
