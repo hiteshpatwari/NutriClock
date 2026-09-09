@@ -1,11 +1,10 @@
 import {
   canonicalizeRegimen,
   assessScheduleQuality,
-  applyConvenienceProfile,
-  buildConvenienceProfile,
   buildConvenienceInsights,
   buildReminderDecisions,
   buildWeeklyReview,
+  deriveConveniencePreferences,
   compareScheduleSimplification,
   generateAdaptiveSchedule,
   generateSchedule,
@@ -14,6 +13,7 @@ import {
   type AdaptiveScheduleResult,
   type CanonicalRegimen,
   type ConvenienceInsight,
+  type ConveniencePreference,
   type DayContext,
   type DayEvent,
   type DailyExecutionLog,
@@ -51,6 +51,7 @@ export interface NutriClockApplication {
   setOverride(override: UserOverride): Promise<NutriClockAppState>;
   generate(): Promise<GeneratedScheduleView | null>;
   loadToday(localDate: string, now: DayContext["now"]): AdaptiveScheduleResult | null;
+  queryWhatCanITakeNow(localDate: string, now: DayContext["now"]): WhatCanITakeNowResult | null;
   recordDayEvent(
     localDate: string,
     now: DayContext["now"],
@@ -61,6 +62,7 @@ export interface NutriClockApplication {
   getReminderDecisions(): ReminderDecision[];
   getWhatCanITakeNow(): WhatCanITakeNowResult | null;
   getConvenienceInsights(): ConvenienceInsight[];
+  getConveniencePreferences(): ConveniencePreference[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
   saveRoutineTemplate(template: RoutineTemplate): Promise<NutriClockAppState>;
   applyRoutineTemplate(templateId: string): Promise<NutriClockAppState>;
@@ -103,19 +105,15 @@ export function createNutriClockApplication(
     return state;
   };
 
-  const regimenForScheduling = (): CanonicalRegimen | null =>
-    current.regimen
-      ? applyConvenienceProfile(current.regimen, buildConvenienceProfile(current.dailyLogs))
-      : null;
-
   const generate = async (): Promise<GeneratedScheduleView | null> => {
-    const schedulingRegimen = regimenForScheduling();
-    if (!schedulingRegimen) return null;
-    const schedule: ScheduleResult = generateSchedule(schedulingRegimen, knowledge);
+    if (!current.regimen) return null;
+    const schedule: ScheduleResult = generateSchedule(current.regimen, knowledge, {
+      conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+    });
     const view: GeneratedScheduleView = { schedule, generatedAt: new Date().toISOString() };
     try {
       await repository.save({
-        ...createEmptyState(schedulingRegimen),
+        ...createEmptyState(current.regimen),
         rulesetVersionLastEvaluated: knowledge.rulesetVersion,
         evidenceRegistryVersionLastEvaluated: knowledge.evidenceRegistryVersion,
         dailyLogs: current.dailyLogs,
@@ -225,13 +223,23 @@ export function createNutriClockApplication(
       if (!current.regimen) return null;
       const log = current.dailyLogs.find((entry) => entry.localDate === localDate);
       const context: DayContext = { localDate, now, events: log?.events ?? [] };
-      const schedulingRegimen = regimenForScheduling();
-      const today = schedulingRegimen
-        ? generateAdaptiveSchedule(schedulingRegimen, context, knowledge)
-        : null;
-      if (!today) return null;
+      const today = generateAdaptiveSchedule(current.regimen, context, knowledge, {
+        conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+      });
       current = { ...current, today };
       return today;
+    },
+    queryWhatCanITakeNow(localDate, now) {
+      if (!current.regimen) return null;
+      const log = current.dailyLogs.find((entry) => entry.localDate === localDate);
+      return queryWhatCanITakeNow(
+        current.regimen,
+        { localDate, now, events: log?.events ?? [] },
+        knowledge,
+        {
+          conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+        },
+      );
     },
     async recordDayEvent(localDate, now, event) {
       if (!current.regimen) return null;
@@ -263,25 +271,37 @@ export function createNutriClockApplication(
       }
     },
     getScheduleQuality() {
-      const schedulingRegimen = regimenForScheduling();
-      if (!schedulingRegimen) return null;
-      return assessScheduleQuality(generateSchedule(schedulingRegimen, knowledge));
+      if (!current.regimen) return null;
+      return assessScheduleQuality(
+        generateSchedule(current.regimen, knowledge, {
+          conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+        }),
+      );
     },
     getScheduleSimplification() {
-      const schedulingRegimen = regimenForScheduling();
-      if (!schedulingRegimen) return null;
-      return compareScheduleSimplification(schedulingRegimen, knowledge);
+      if (!current.regimen) return null;
+      return compareScheduleSimplification(current.regimen, knowledge);
     },
     getReminderDecisions() {
       if (!current.regimen || !current.today) return [];
       return buildReminderDecisions(current.today, current.regimen.preferences);
     },
     getWhatCanITakeNow() {
-      return current.today ? queryWhatCanITakeNow(current.today) : null;
+      if (!current.today || !current.regimen) return null;
+      return queryWhatCanITakeNow(
+        current.regimen,
+        current.today.context,
+        knowledge,
+        { conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs) },
+      );
     },
     getConvenienceInsights() {
       if (!current.regimen) return [];
       return buildConvenienceInsights(current.regimen, current.dailyLogs);
+    },
+    getConveniencePreferences() {
+      if (!current.regimen) return [];
+      return deriveConveniencePreferences(current.regimen, current.dailyLogs);
     },
     getWeeklyReview(weekStart) {
       if (!current.regimen) return null;
@@ -318,9 +338,7 @@ export function createNutriClockApplication(
     },
     async applyScheduleSimplification() {
       if (!current.regimen) return current;
-      const schedulingRegimen = regimenForScheduling();
-      if (!schedulingRegimen) return current;
-      const comparison = compareScheduleSimplification(schedulingRegimen, knowledge);
+      const comparison = compareScheduleSimplification(current.regimen, knowledge);
       if (!comparison.canSimplify) return current;
       const simplerTimes = new Map(
         comparison.simpler.items

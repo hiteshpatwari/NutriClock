@@ -196,6 +196,7 @@ export interface TodayScheduleItem {
   item: ScheduleItem;
   executionStatus: ExecutionStatus;
   availableNow: boolean;
+  /** The recorded execution time, when an execution event exists for this item. */
   recordedTime?: LocalTime;
 }
 
@@ -220,7 +221,9 @@ export interface AdaptiveScheduleResult {
   context: DayContext;
   schedule: ScheduleResult;
   items: TodayScheduleItem[];
+  /** Medication anchors remain at their canonical times; execution is tracked separately. */
   medications: MedicationDayStatus[];
+  /** Items still actionable in the remaining day, excluding taken and skipped items. */
   remainingItems: TodayScheduleItem[];
   availability: AvailabilityDecision[];
 }
@@ -231,6 +234,8 @@ export interface WhatCanITakeNowResult {
   waiting: AvailabilityDecision[];
   completed: AvailabilityDecision[];
   skipped: AvailabilityDecision[];
+  unavailable: AvailabilityDecision[];
+  all: AvailabilityDecision[];
   medicationStatus: MedicationDayStatus[];
 }
 
@@ -269,20 +274,22 @@ export interface ReminderDecision {
 }
 
 export interface ConvenienceInsight {
-  kind: "frequently_skipped" | "frequently_snoozed" | "frequent_adjustments";
+  kind:
+    | "frequently_skipped"
+    | "frequently_snoozed"
+    | "frequent_adjustments"
+    | "repeated_execution_window";
   itemId?: StableId;
   message: string;
   count: number;
+  preferredTime?: LocalTime;
 }
 
 export interface ConveniencePreference {
   itemId: StableId;
-  observedTime: LocalTime;
-  observations: number;
-}
-
-export interface ConvenienceProfile {
-  preferences: ConveniencePreference[];
+  preferredTime: LocalTime;
+  observedDays: number;
+  message: string;
 }
 
 export interface EvidenceReference {
@@ -378,7 +385,10 @@ export interface SchedulerOptions {
   traceMode?: "summary" | "full";
   config?: SchedulerConfig;
   temporaryMedicationAnchors?: MedicationAnchor[];
+  /** Restrict generated supplement placements to the remaining part of the local day. */
   notBefore?: LocalTime;
+  /** Advisory local execution preferences; hard rules and explicit user preferences win. */
+  conveniencePreferences?: ConveniencePreference[];
 }
 
 export interface CandidateRuleEvaluation {
@@ -1249,8 +1259,18 @@ export function generateSchedule(
 ): ScheduleResult {
   const temporaryMedicationAnchors = options.temporaryMedicationAnchors ?? [];
   const temporaryById = new Map(temporaryMedicationAnchors.map((anchor) => [anchor.id, anchor]));
+  const convenienceById = new Map(
+    (options.conveniencePreferences ?? []).map((preference) => [
+      preference.itemId,
+      preference.preferredTime,
+    ]),
+  );
   const regimen = canonicalizeRegimen({
     ...input,
+    supplements: input.supplements.map((item) => {
+      const preferredTime = convenienceById.get(item.id);
+      return item.preferredTime || !preferredTime ? item : { ...item, preferredTime };
+    }),
     medications: [
       ...input.medications.map((anchor) => temporaryById.get(anchor.id) ?? anchor),
       ...temporaryMedicationAnchors.filter(
@@ -1318,10 +1338,10 @@ export function generateSchedule(
   const candidateCache = new Map<string, LocalTime[]>();
   for (const item of allItems) {
     const override = matchingOverride(item, regimen);
-    const candidates = override ? [override.selectedTime] : candidateTimes(item, regimen, config);
     const notBeforeTimeline = options.notBefore
       ? eventTimeline(options.notBefore, regimen)
       : undefined;
+    const candidates = override ? [override.selectedTime] : candidateTimes(item, regimen, config);
     candidateCache.set(
       item.id,
       notBeforeTimeline === undefined
@@ -1643,6 +1663,35 @@ function latestExecutionEvents(context: DayContext): Map<StableId, DayEvent> {
   return latest;
 }
 
+function latestMedicationEvents(
+  context: DayContext,
+): Map<StableId, Extract<DayEvent, { kind: "medication_taken" }>> {
+  const latest = new Map<StableId, Extract<DayEvent, { kind: "medication_taken" }>>();
+  for (const event of context.events) {
+    if (event.kind === "medication_taken") latest.set(event.anchorId, event);
+  }
+  return latest;
+}
+
+function medicationDayStatuses(
+  regimen: CanonicalRegimen,
+  context: DayContext,
+): MedicationDayStatus[] {
+  const latest = latestMedicationEvents(context);
+  return regimen.medications
+    .map((anchor): MedicationDayStatus => {
+      const event = latest.get(anchor.id);
+      return {
+        anchorId: anchor.id,
+        displayName: anchor.displayName,
+        status: event ? "taken" : "planned",
+        scheduledTime: { ...anchor.administrationTime },
+        ...(event ? { recordedTime: { ...event.time } } : {}),
+      };
+    })
+    .sort((a, b) => a.anchorId.localeCompare(b.anchorId));
+}
+
 function applyDayContext(
   regimen: CanonicalRegimen,
   context: DayContext,
@@ -1736,6 +1785,7 @@ export function generateAdaptiveSchedule(
   options: SchedulerOptions = {},
 ): AdaptiveScheduleResult {
   const execution = latestExecutionEvents(context);
+  const medicationStatus = medicationDayStatuses(regimen, context);
   const adaptedRegimen = applyDayContext(regimen, context, knowledge);
   const temporaryMedicationAnchors = context.events
     .filter(
@@ -1748,11 +1798,12 @@ export function generateAdaptiveSchedule(
       return { ...anchor, administrationTime: event.time };
     })
     .filter((anchor): anchor is MedicationAnchor => Boolean(anchor));
-  const adaptiveOptions = { ...options, temporaryMedicationAnchors };
-  const derivedSchedule = generateSchedule(adaptedRegimen, knowledge, {
-    ...adaptiveOptions,
+  const adaptiveOptions = {
+    ...options,
     notBefore: context.now,
-  });
+    temporaryMedicationAnchors,
+  };
+  const derivedSchedule = generateSchedule(adaptedRegimen, knowledge, adaptiveOptions);
   const baseline = generateSchedule(regimen, knowledge, options);
   const generatedById = new Map(derivedSchedule.items.map((item) => [item.id, item]));
   const baselineById = new Map(baseline.items.map((item) => [item.id, item]));
@@ -1766,7 +1817,14 @@ export function generateAdaptiveSchedule(
 
   for (const medication of regimen.medications) {
     const item = baselineById.get(medication.id) ?? generatedById.get(medication.id);
-    if (item) items.push({ item, executionStatus: "planned", availableNow: false });
+    const status = medicationStatus.find((entry) => entry.anchorId === medication.id);
+    if (item)
+      items.push({
+        item,
+        executionStatus: status?.status === "taken" ? "taken" : "planned",
+        availableNow: false,
+        ...(status?.recordedTime ? { recordedTime: status.recordedTime } : {}),
+      });
   }
   for (const supplement of regimen.supplements) {
     const event = execution.get(supplement.id);
@@ -1843,6 +1901,15 @@ export function generateAdaptiveSchedule(
           evidenceIds: todayItem.item.evidenceIds,
           message: dayItemMessage(todayItem),
         };
+      if (event?.kind === "supplement_snoozed")
+        return {
+          itemId: todayItem.item.sourceId,
+          status: "wait",
+          ...(todayItem.item.time ? { nextValidTime: todayItem.item.time } : {}),
+          ruleIds: todayItem.item.influencingRuleIds,
+          evidenceIds: todayItem.item.evidenceIds,
+          message: dayItemMessage(todayItem),
+        };
       if (todayItem.availableNow)
         return {
           itemId: todayItem.item.sourceId,
@@ -1869,48 +1936,56 @@ export function generateAdaptiveSchedule(
         message: dayItemMessage(todayItem),
       };
     });
-  const schedule = {
-    ...derivedSchedule,
-    items: derivedSchedule.items.map((item) =>
-      item.kind === "medication_anchor" ? (baselineById.get(item.id) ?? item) : item,
-    ),
-  };
-  const medicationEvents = new Map<StableId, Extract<DayEvent, { kind: "medication_taken" }>>();
-  for (const event of context.events) {
-    if (event.kind === "medication_taken") medicationEvents.set(event.anchorId, event);
-  }
-  const medications = regimen.medications.map((anchor) => {
-    const event = medicationEvents.get(anchor.id);
-    return {
-      anchorId: anchor.id,
-      displayName: anchor.displayName,
-      status: event ? ("taken" as const) : ("planned" as const),
-      scheduledTime: anchor.administrationTime,
-      ...(event ? { recordedTime: event.time } : {}),
-    };
-  });
   const remainingItems = items.filter(
     (entry) =>
       entry.item.kind === "supplement" &&
       entry.executionStatus !== "taken" &&
       entry.executionStatus !== "skipped",
   );
-  return { context, schedule, items, medications, remainingItems, availability };
+  const schedule = {
+    ...derivedSchedule,
+    items: derivedSchedule.items.map((item) =>
+      item.kind === "medication_anchor" ? (baselineById.get(item.id) ?? item) : item,
+    ),
+  };
+  return { context, schedule, items, medications: medicationStatus, remainingItems, availability };
 }
 
-export function queryWhatCanITakeNow(today: AdaptiveScheduleResult): WhatCanITakeNowResult {
+/** Recompute the actionable part of a day from canonical regimen plus recorded day facts. */
+export function adaptRemainingDay(
+  regimen: CanonicalRegimen,
+  context: DayContext,
+  knowledge: KnowledgeSnapshot,
+  options: SchedulerOptions = {},
+): AdaptiveScheduleResult {
+  return generateAdaptiveSchedule(regimen, context, knowledge, options);
+}
+
+/** Answer the local, timing-only "what can I take now?" query. */
+export function queryWhatCanITakeNow(
+  regimen: CanonicalRegimen,
+  context: DayContext,
+  knowledge: KnowledgeSnapshot,
+  options: SchedulerOptions = {},
+): WhatCanITakeNowResult {
+  const adapted = generateAdaptiveSchedule(regimen, context, knowledge, options);
   const availableIds = new Set(
-    today.availability
+    adapted.availability
       .filter((entry) => entry.status === "available_now")
       .map((entry) => entry.itemId),
   );
+  const available = adapted.items.filter(
+    (entry) => entry.item.kind === "supplement" && availableIds.has(entry.item.sourceId),
+  );
   return {
-    context: today.context,
-    available: today.remainingItems.filter((entry) => availableIds.has(entry.item.sourceId)),
-    waiting: today.availability.filter((entry) => entry.status === "wait"),
-    completed: today.availability.filter((entry) => entry.status === "completed"),
-    skipped: today.availability.filter((entry) => entry.status === "skipped"),
-    medicationStatus: today.medications,
+    context: adapted.context,
+    available,
+    waiting: adapted.availability.filter((entry) => entry.status === "wait"),
+    completed: adapted.availability.filter((entry) => entry.status === "completed"),
+    skipped: adapted.availability.filter((entry) => entry.status === "skipped"),
+    unavailable: adapted.availability.filter((entry) => entry.status === "unavailable_today"),
+    all: adapted.availability,
+    medicationStatus: adapted.medications,
   };
 }
 
@@ -2144,11 +2219,30 @@ export function buildConvenienceInsights(
       message: `You recorded ${adjustmentCount} routine changes. A saved routine template may make these days easier to set up.`,
     });
   }
+  for (const preference of deriveConveniencePreferences(regimen, logs)) {
+    insights.push({
+      kind: "repeated_execution_window",
+      itemId: preference.itemId,
+      count: preference.observedDays,
+      preferredTime: preference.preferredTime,
+      message: preference.message,
+    });
+  }
   return insights.sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));
 }
 
-export function buildConvenienceProfile(logs: DailyExecutionLog[]): ConvenienceProfile {
-  const observations = new Map<StableId, number[]>();
+/**
+ * Derive an advisory time preference from repeated local execution logs.
+ *
+ * This never edits the regimen and never bypasses the scheduler. A caller may
+ * use the result to offer a convenience adjustment, but any chosen time must
+ * still pass the normal hard-constraint evaluation.
+ */
+export function deriveConveniencePreferences(
+  regimen: CanonicalRegimen,
+  logs: DailyExecutionLog[],
+): ConveniencePreference[] {
+  const observed = new Map<StableId, Map<string, LocalTime>>();
   for (const log of logs) {
     const latest = latestExecutionEvents({
       localDate: log.localDate,
@@ -2157,39 +2251,31 @@ export function buildConvenienceProfile(logs: DailyExecutionLog[]): ConvenienceP
     });
     for (const event of latest.values()) {
       if (event.kind !== "supplement_taken") continue;
-      const times = observations.get(event.itemId) ?? [];
-      times.push(event.time.minuteOfDay);
-      observations.set(event.itemId, times);
+      const itemDays = observed.get(event.itemId) ?? new Map<string, LocalTime>();
+      itemDays.set(log.localDate, { ...event.time });
+      observed.set(event.itemId, itemDays);
     }
   }
   const preferences: ConveniencePreference[] = [];
-  for (const [itemId, values] of observations) {
-    if (values.length < 3) continue;
-    const sorted = [...values].sort((a, b) => a - b);
-    const observedTime = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  for (const item of [...regimen.supplements].sort((a, b) => a.id.localeCompare(b.id))) {
+    const times = [...(observed.get(item.id)?.values() ?? [])].sort(
+      (a, b) => a.minuteOfDay - b.minuteOfDay,
+    );
+    if (times.length < 2) continue;
+    const middle = Math.floor(times.length / 2);
+    const minuteOfDay =
+      times.length % 2 === 1
+        ? times[middle]!.minuteOfDay
+        : Math.round((times[middle - 1]!.minuteOfDay + times[middle]!.minuteOfDay) / 2);
+    const displayName = supplementDisplayName(item);
     preferences.push({
-      itemId,
-      observedTime: { minuteOfDay: observedTime },
-      observations: values.length,
+      itemId: item.id,
+      preferredTime: { minuteOfDay },
+      observedDays: times.length,
+      message: `${displayName} was recorded around ${formatLocalTime({ minuteOfDay })} on ${times.length} days. This is a convenience preference only; supported timing constraints still apply.`,
     });
   }
-  return { preferences: preferences.sort((a, b) => a.itemId.localeCompare(b.itemId)) };
-}
-
-export function applyConvenienceProfile(
-  regimen: CanonicalRegimen,
-  profile: ConvenienceProfile,
-): CanonicalRegimen {
-  const byItem = new Map(profile.preferences.map((preference) => [preference.itemId, preference]));
-  return {
-    ...regimen,
-    supplements: regimen.supplements.map((item) => {
-      if (item.preferredTime || regimen.overrides.some((override) => override.itemId === item.id))
-        return item;
-      const preference = byItem.get(item.id);
-      return preference ? { ...item, preferredTime: preference.observedTime } : item;
-    }),
-  };
+  return preferences;
 }
 
 export function buildReminderDecisions(
