@@ -27,6 +27,9 @@ export default function Welcome() {
       <Link href="/review" style={styles.link}>
         Weekly review
       </Link>
+      <Link href="/routines" style={styles.link}>
+        Routine templates
+      </Link>
       <Text style={styles.muted}>Stored on this device. No account required.</Text>
     </ScrollView>
   );

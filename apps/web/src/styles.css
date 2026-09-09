@@ -328,6 +328,15 @@ select:focus-visible {
 .now-card p {
   margin: 6px 0 0;
 }
+.reminder-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #b4d0bf;
+}
+.reminder-line {
+  color: #175f52;
+  font-weight: 700;
+}
 .today-actions,
 .today-adjust,
 .today-item-actions {
@@ -431,6 +440,43 @@ select:focus-visible {
   margin: 0 0 8px;
   color: #173f38;
   text-transform: capitalize;
+}
+.template-create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 22px 0;
+}
+.template-create label {
+  flex: 1;
+  min-width: 220px;
+}
+.template-create button,
+.template-item button {
+  margin-top: 0;
+}
+.template-list {
+  margin: 20px 0;
+}
+.template-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-top: 1px solid #d7ddd2;
+}
+.template-item h2 {
+  margin: 0 0 5px;
+  color: #173f38;
+  font-size: 1.1rem;
+}
+@media (max-width: 700px) {
+  .template-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 .source a + a {
   margin-left: 12px;

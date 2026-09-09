@@ -40,6 +40,8 @@ export function decodeState(value: unknown): PersistedNutriClockState {
     throw new Error("Evidence version metadata is invalid");
   if (state.dailyLogs !== undefined && !Array.isArray(state.dailyLogs))
     throw new Error("Daily execution logs are invalid");
+  if (state.routineTemplates !== undefined && !Array.isArray(state.routineTemplates))
+    throw new Error("Routine templates are invalid");
   return state as PersistedNutriClockState;
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { formatLocalTime } from "@nutriclock/domain";
 import { styles } from "./index";
 import { useNutriClockApplication } from "../src/app-context";
@@ -46,6 +46,7 @@ export default function Review() {
   const review = app.getWeeklyReview(weekStart);
   const quality = app.getScheduleQuality();
   const simplification = app.getScheduleSimplification();
+  const insights = app.getConvenienceInsights();
   const rate = review?.executionRate;
   return (
     <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: "#f3f0e8", flexGrow: 1 }}>
@@ -75,6 +76,16 @@ export default function Review() {
             Most snoozed: {review.mostSnoozedItem.displayName} ({review.mostSnoozedItem.count}).
           </Text>
         )}
+        {insights.length > 0 && (
+          <View style={reviewStyles.quality}>
+            <Text style={styles.eyebrow}>EXECUTION PATTERNS</Text>
+            {insights.map((insight) => (
+              <Text key={`${insight.kind}:${insight.itemId ?? "routine"}`} style={styles.body}>
+                {insight.message}
+              </Text>
+            ))}
+          </View>
+        )}
         {quality && (
           <View style={reviewStyles.quality}>
             <Text style={styles.eyebrow}>SCHEDULE COMPLEXITY</Text>
@@ -99,6 +110,25 @@ export default function Review() {
                 </Text>
               ))}
             <Text style={styles.muted}>Comparison only; your current schedule is unchanged.</Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.button}
+              onPress={() =>
+                Alert.alert(
+                  "Use simpler times?",
+                  "This changes supplement timing preferences only. Medication anchors remain fixed.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Use times",
+                      onPress: () => void app.applyScheduleSimplification().then(() => refresh()),
+                    },
+                  ],
+                )
+              }
+            >
+              <Text style={styles.buttonText}>Use grouping-oriented times</Text>
+            </Pressable>
           </View>
         )}
         <Text style={styles.body}>
@@ -107,6 +137,9 @@ export default function Review() {
         </Text>
         <Link href="/today" style={styles.link}>
           Open Today
+        </Link>
+        <Link href="/routines" style={styles.link}>
+          Routine templates
         </Link>
       </View>
     </ScrollView>

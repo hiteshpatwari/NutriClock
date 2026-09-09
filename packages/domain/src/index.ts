@@ -44,6 +44,12 @@ export interface DailyRoutine {
   beverages: BeverageEvent[];
 }
 
+export interface RoutineTemplate {
+  id: StableId;
+  name: string;
+  routine: DailyRoutine;
+}
+
 export type SupplementId =
   | "iron"
   | "vitamin_c"
@@ -108,6 +114,8 @@ export interface MedicationAnchor {
 
 export interface UserPreferences {
   flexibleItemGrouping: "prefer_grouping" | "prefer_separate";
+  remindersEnabled?: boolean;
+  reminderLeadMinutes?: 0 | 15 | 30;
 }
 
 export interface UserOverride {
@@ -133,6 +141,7 @@ export interface PersistedNutriClockState {
   evidenceRegistryVersionLastEvaluated: string | null;
   regimen: CanonicalRegimen;
   dailyLogs?: DailyExecutionLog[];
+  routineTemplates?: RoutineTemplate[];
 }
 
 export type DayEvent =
@@ -217,6 +226,22 @@ export interface WeeklyReviewSummary {
   executionRate: number | null;
   mostSkippedItem?: { itemId: StableId; displayName: string; count: number };
   mostSnoozedItem?: { itemId: StableId; displayName: string; count: number };
+}
+
+export interface ReminderDecision {
+  itemId: StableId;
+  status: "due" | "upcoming" | "waiting" | "completed" | "skipped";
+  scheduledTime?: LocalTime;
+  message: string;
+  ruleIds: string[];
+  evidenceIds: string[];
+}
+
+export interface ConvenienceInsight {
+  kind: "frequently_skipped" | "frequently_snoozed" | "frequent_adjustments";
+  itemId?: StableId;
+  message: string;
+  count: number;
 }
 
 export interface EvidenceReference {
@@ -1970,6 +1995,127 @@ export function buildWeeklyReview(
     ...(mostSkippedItem ? { mostSkippedItem } : {}),
     ...(mostSnoozedItem ? { mostSnoozedItem } : {}),
   };
+}
+
+export function buildConvenienceInsights(
+  regimen: CanonicalRegimen,
+  logs: DailyExecutionLog[],
+): ConvenienceInsight[] {
+  const skipped = new Map<StableId, number>();
+  const snoozed = new Map<StableId, number>();
+  let adjustmentCount = 0;
+  for (const log of logs) {
+    const latest = latestExecutionEvents({
+      localDate: log.localDate,
+      now: { minuteOfDay: 0 },
+      events: log.events,
+    });
+    for (const event of latest.values()) {
+      if (event.kind === "supplement_skipped")
+        skipped.set(event.itemId, (skipped.get(event.itemId) ?? 0) + 1);
+      if (event.kind === "supplement_snoozed")
+        snoozed.set(event.itemId, (snoozed.get(event.itemId) ?? 0) + 1);
+    }
+    adjustmentCount += log.events.filter(
+      (event) =>
+        event.kind === "wake_time_changed" ||
+        event.kind === "bedtime_changed" ||
+        event.kind === "meal_recorded" ||
+        event.kind === "meal_skipped" ||
+        event.kind === "beverage_recorded" ||
+        event.kind === "beverage_skipped",
+    ).length;
+  }
+  const insights: ConvenienceInsight[] = [];
+  for (const [itemId, count] of skipped) {
+    if (count < 2) continue;
+    const item = regimen.supplements.find((candidate) => candidate.id === itemId);
+    if (!item) continue;
+    insights.push({
+      kind: "frequently_skipped",
+      itemId,
+      count,
+      message: `${supplementDisplayName(item)} was skipped on ${count} recorded days. Review its timing or routine context if this window is difficult to follow.`,
+    });
+  }
+  for (const [itemId, count] of snoozed) {
+    if (count < 2) continue;
+    const item = regimen.supplements.find((candidate) => candidate.id === itemId);
+    if (!item) continue;
+    insights.push({
+      kind: "frequently_snoozed",
+      itemId,
+      count,
+      message: `${supplementDisplayName(item)} was snoozed ${count} times. A different valid window may be easier to follow.`,
+    });
+  }
+  if (adjustmentCount >= 3) {
+    insights.push({
+      kind: "frequent_adjustments",
+      count: adjustmentCount,
+      message: `You recorded ${adjustmentCount} routine changes. A saved routine template may make these days easier to set up.`,
+    });
+  }
+  return insights.sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));
+}
+
+export function buildReminderDecisions(
+  today: AdaptiveScheduleResult,
+  preferences: UserPreferences,
+): ReminderDecision[] {
+  if (!preferences.remindersEnabled) return [];
+  const leadMinutes = preferences.reminderLeadMinutes ?? 0;
+  const availability = new Map(today.availability.map((entry) => [entry.itemId, entry]));
+  return today.items
+    .filter((entry) => entry.item.kind === "supplement")
+    .map((entry): ReminderDecision => {
+      const decision = availability.get(entry.item.sourceId);
+      const scheduledTime = entry.item.time;
+      if (entry.executionStatus === "taken" || decision?.status === "completed")
+        return {
+          itemId: entry.item.sourceId,
+          status: "completed",
+          ...(scheduledTime ? { scheduledTime } : {}),
+          message: `${entry.item.displayName} is marked taken.`,
+          ruleIds: entry.item.influencingRuleIds,
+          evidenceIds: entry.item.evidenceIds,
+        };
+      if (entry.executionStatus === "skipped" || decision?.status === "skipped")
+        return {
+          itemId: entry.item.sourceId,
+          status: "skipped",
+          ...(scheduledTime ? { scheduledTime } : {}),
+          message: `${entry.item.displayName} is marked skipped for today. No make-up dose is suggested.`,
+          ruleIds: entry.item.influencingRuleIds,
+          evidenceIds: entry.item.evidenceIds,
+        };
+      if (decision?.status === "available_now") {
+        const dueAt = Math.max(
+          0,
+          (scheduledTime?.minuteOfDay ?? today.context.now.minuteOfDay) - leadMinutes,
+        );
+        const due = today.context.now.minuteOfDay >= dueAt;
+        return {
+          itemId: entry.item.sourceId,
+          status: due ? "due" : "upcoming",
+          ...(scheduledTime ? { scheduledTime } : {}),
+          message: due
+            ? `${entry.item.displayName} is available now based on your recorded context.`
+            : `${entry.item.displayName} reminder window opens at ${formatLocalTime({ minuteOfDay: dueAt })}.`,
+          ruleIds: decision.ruleIds,
+          evidenceIds: decision.evidenceIds,
+        };
+      }
+      return {
+        itemId: entry.item.sourceId,
+        status: "waiting",
+        ...(decision?.nextValidTime ? { scheduledTime: decision.nextValidTime } : {}),
+        message:
+          decision?.message ?? `${entry.item.displayName} is waiting for a valid supported window.`,
+        ruleIds: decision?.ruleIds ?? entry.item.influencingRuleIds,
+        evidenceIds: decision?.evidenceIds ?? entry.item.evidenceIds,
+      };
+    });
 }
 
 export function explainScheduleItem(

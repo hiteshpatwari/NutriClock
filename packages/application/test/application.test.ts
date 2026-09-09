@@ -99,4 +99,32 @@ describe("application orchestration", () => {
     });
     expect(app.getScheduleQuality()?.complexity).toBe("simple");
   });
+
+  it("saves and applies local routine templates without changing supplements or medications", async () => {
+    const repository = memoryRepository();
+    const app = createNutriClockApplication(repository);
+    await app.replaceRegimen(emptyRegimen);
+    await app.saveRoutineTemplate({
+      id: "office-day",
+      name: "Office day",
+      routine: {
+        wakeTime: { minuteOfDay: 360 },
+        bedtime: { minuteOfDay: 1320 },
+        meals: [{ id: "breakfast-office", name: "breakfast", time: { minuteOfDay: 420 } }],
+        beverages: [{ id: "coffee-office", kind: "coffee", time: { minuteOfDay: 450 } }],
+      },
+    });
+    await app.applyRoutineTemplate("office-day");
+
+    expect(app.state.routineTemplates).toHaveLength(1);
+    expect(app.state.regimen?.routine.wakeTime).toEqual({ minuteOfDay: 360 });
+    expect(JSON.parse(repository.value ?? "null").routineTemplates).toHaveLength(1);
+    await app.generate();
+    expect(JSON.parse(repository.value ?? "null").routineTemplates).toHaveLength(1);
+    await app.setReminderPreferences(true, 15);
+    expect(app.state.regimen?.preferences).toMatchObject({
+      remindersEnabled: true,
+      reminderLeadMinutes: 15,
+    });
+  });
 });

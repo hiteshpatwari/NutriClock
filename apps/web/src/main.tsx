@@ -14,6 +14,7 @@ import {
   type DoseUnit,
   type LocalTime,
   type MedicationAnchor,
+  type RoutineTemplate,
   type SupplementEntry,
   type SupplementFormId,
 } from "@nutriclock/domain";
@@ -102,6 +103,7 @@ function Layout() {
           <nav aria-label="Primary">
             <Link to="/today">Today</Link>
             <Link to="/review">Review</Link>
+            <Link to="/routines">Routines</Link>
             <Link to="/day">Your Day</Link>
             <Link to="/supplements">Supplements</Link>
             <Link to="/medications">Medications</Link>
@@ -124,6 +126,7 @@ function Layout() {
           <Route path="/" element={<Welcome onStart={() => navigate("/day")} />} />
           <Route path="/today" element={<TodayPage app={app} />} />
           <Route path="/review" element={<ReviewPage app={app} />} />
+          <Route path="/routines" element={<RoutineTemplatesPage app={app} />} />
           <Route
             path="/day"
             element={
@@ -210,6 +213,8 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
     return () => window.clearInterval(interval);
   }, [app, date]);
   const today = app.state.today;
+  const reminderDecisions = app.getReminderDecisions();
+  const remindersEnabled = app.state.regimen?.preferences.remindersEnabled === true;
   const record = async (event: DayEvent) => {
     await app.recordDayEvent(date, localNow(), event);
     refreshToday();
@@ -256,6 +261,33 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         ) : (
           <p>No supplement is currently marked available. Review the next windows below.</p>
         )}
+        <div className="reminder-panel">
+          <strong>Local reminder guidance</strong>
+          <p>
+            {remindersEnabled
+              ? reminderDecisions.filter((entry) => entry.status === "due").length
+                ? "A supported supplement window is available now."
+                : "Reminder guidance is enabled and follows the current day context."
+              : "Optional, local-only guidance based on supported timing windows."}
+          </p>
+          <button
+            className="secondary"
+            onClick={() =>
+              void app.setReminderPreferences(!remindersEnabled, 0).then(() => refreshToday())
+            }
+          >
+            {remindersEnabled ? "Turn off reminder guidance" : "Enable reminder guidance"}
+          </button>
+          {remindersEnabled &&
+            reminderDecisions
+              .filter((entry) => entry.status === "due" || entry.status === "waiting")
+              .slice(0, 3)
+              .map((entry) => (
+                <p key={entry.itemId} className="reminder-line">
+                  {entry.message}
+                </p>
+              ))}
+        </div>
       </div>
       <div className="today-actions">
         <button className="secondary" onClick={() => setWakeValue(inputTime(now))}>
@@ -449,6 +481,17 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
   const review = app.getWeeklyReview(weekStart);
   const quality = app.getScheduleQuality();
   const simplification = app.getScheduleSimplification();
+  const insights = app.getConvenienceInsights();
+  const applySimplification = async () => {
+    if (
+      !window.confirm(
+        "Use the grouping-oriented supplement times? Medication anchors will remain fixed.",
+      )
+    )
+      return;
+    await app.applyScheduleSimplification();
+    setRevision((value) => value + 1);
+  };
   return (
     <section className="card review-page">
       <div className="resulthead">
@@ -498,6 +541,14 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
           <strong>{review.mostSnoozedItem.displayName}</strong> ({review.mostSnoozedItem.count}).
         </p>
       )}
+      {insights.length > 0 && (
+        <div className="notice">
+          <strong>Execution patterns</strong>
+          {insights.map((insight) => (
+            <p key={`${insight.kind}:${insight.itemId ?? "routine"}`}>{insight.message}</p>
+          ))}
+        </div>
+      )}
       {quality && (
         <div className="quality-card">
           <p className="eyebrow">SCHEDULE COMPLEXITY</p>
@@ -530,12 +581,98 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
           <p className="metadata">
             This is a comparison only. Your current schedule and preferences are unchanged.
           </p>
+          <button className="secondary" onClick={() => void applySimplification()}>
+            Use grouping-oriented times
+          </button>
         </div>
       )}
       <p className="helper">
         Use Today to record what happened and adapt the remaining day. NutriClock never changes
         medication anchors or recommends doses.
       </p>
+      <Link to="/today">Open Today</Link>
+    </section>
+  );
+}
+
+function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
+  const [, setRevision] = useState(0);
+  const [name, setName] = useState("");
+  if (!app.state.regimen) {
+    return (
+      <section className="card">
+        <p className="eyebrow">ROUTINES</p>
+        <h1>Build your NutriClock first</h1>
+        <p className="helper">Save routine templates after setting your day shape.</p>
+        <Link to="/day">Start with Your Day</Link>
+      </section>
+    );
+  }
+  const saveTemplate = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const routine = app.state.regimen?.routine;
+    if (!routine) return;
+    const template: RoutineTemplate = {
+      id: newId(),
+      name: trimmed,
+      routine: {
+        ...routine,
+        meals: routine.meals.map((meal) => ({ ...meal })),
+        beverages: routine.beverages.map((beverage) => ({ ...beverage })),
+      },
+    };
+    await app.saveRoutineTemplate(template);
+    setName("");
+    setRevision((value) => value + 1);
+  };
+  const applyTemplate = async (templateId: string) => {
+    await app.applyRoutineTemplate(templateId);
+    setRevision((value) => value + 1);
+  };
+  return (
+    <section className="card routines-page">
+      <p className="eyebrow">ROUTINES</p>
+      <h1>Routine templates</h1>
+      <p className="helper">
+        Save different day shapes such as Office day or Weekend. Applying one changes meal,
+        beverage, wake, and bedtime context only; it never changes your supplements, doses, or
+        medication anchors.
+      </p>
+      <div className="template-create">
+        <label>
+          Template name
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Office day"
+          />
+        </label>
+        <button onClick={() => void saveTemplate()} disabled={!name.trim()}>
+          Save current routine
+        </button>
+      </div>
+      <div className="template-list">
+        {app.state.routineTemplates.length ? (
+          app.state.routineTemplates.map((template) => (
+            <article className="template-item" key={template.id}>
+              <div>
+                <h2>{template.name}</h2>
+                <p className="metadata">
+                  Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
+                  {formatLocalTime(template.routine.bedtime)} · {template.routine.meals.length} meal
+                  {template.routine.meals.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <button className="secondary" onClick={() => void applyTemplate(template.id)}>
+                Apply template
+              </button>
+            </article>
+          ))
+        ) : (
+          <p className="helper">No saved templates yet.</p>
+        )}
+      </div>
       <Link to="/today">Open Today</Link>
     </section>
   );

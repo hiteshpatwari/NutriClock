@@ -45,6 +45,8 @@ export default function Today() {
     return () => clearInterval(timer);
   }, [app, day]);
   const today = app.state.today;
+  const reminderDecisions = app.getReminderDecisions();
+  const remindersEnabled = app.state.regimen?.preferences.remindersEnabled === true;
   const record = async (event: DayEvent) => {
     await app.recordDayEvent(day, nowTime(), event);
     refresh();
@@ -92,6 +94,38 @@ export default function Today() {
           ) : (
             <Text style={styles.body}>No supplement is currently marked available.</Text>
           )}
+          <View
+            style={{ borderTopWidth: 1, borderTopColor: "#b4d0bf", marginTop: 12, paddingTop: 12 }}
+          >
+            <Text style={{ color: "#175f52", fontWeight: "800" }}>Local reminder guidance</Text>
+            <Text style={styles.body}>
+              {remindersEnabled
+                ? reminderDecisions.some((entry) => entry.status === "due")
+                  ? "A supported supplement window is available now."
+                  : "Guidance follows your recorded day context."
+                : "Optional and stored only on this device."}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.button}
+              onPress={() =>
+                void app.setReminderPreferences(!remindersEnabled, 0).then(() => refresh())
+              }
+            >
+              <Text style={styles.buttonText}>
+                {remindersEnabled ? "Turn off reminder guidance" : "Enable reminder guidance"}
+              </Text>
+            </Pressable>
+            {remindersEnabled &&
+              reminderDecisions
+                .filter((entry) => entry.status === "due" || entry.status === "waiting")
+                .slice(0, 3)
+                .map((entry) => (
+                  <Text key={entry.itemId} style={styles.body}>
+                    {entry.message}
+                  </Text>
+                ))}
+          </View>
         </View>
         <Text style={styles.label}>Adjust today</Text>
         <TextInput
@@ -230,6 +264,9 @@ export default function Today() {
         </Link>
         <Link href="/review" style={styles.link}>
           Weekly review
+        </Link>
+        <Link href="/routines" style={styles.link}>
+          Routine templates
         </Link>
       </View>
     </ScrollView>

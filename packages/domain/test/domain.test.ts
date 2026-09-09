@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assessScheduleQuality,
+  buildConvenienceInsights,
+  buildReminderDecisions,
   buildWeeklyReview,
   compareScheduleSimplification,
   generateSchedule,
@@ -545,5 +547,40 @@ describe("deterministic scheduler", () => {
     expect(comparison.simpler.status).not.toBe("incomplete");
     expect(comparison.simplerWindowCount).toBeLessThanOrEqual(comparison.currentWindowCount);
     expect(input.supplements.every((item) => item.preferredTime)).toBe(true);
+  });
+
+  it("derives local reminders from availability rather than medical urgency", () => {
+    const input = regimen([
+      supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(10) }),
+    ]);
+    const today = generateAdaptiveSchedule(
+      input,
+      { localDate: "2026-09-08", now: t(10), events: [] },
+      loadKnowledgeSnapshot(),
+    );
+    const reminders = buildReminderDecisions(today, {
+      flexibleItemGrouping: "prefer_grouping",
+      remindersEnabled: true,
+      reminderLeadMinutes: 0,
+    });
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]).toMatchObject({ itemId: "b12-1", status: "due" });
+    expect(reminders[0]?.message).toContain("available now");
+  });
+
+  it("derives convenience insights only from repeated execution behavior", () => {
+    const input = regimen([supplement({ id: id("iron-1"), supplementId: "iron" })]);
+    const insights = buildConvenienceInsights(input, [
+      {
+        localDate: "2026-09-08",
+        events: [{ id: "skip-1", kind: "supplement_skipped", itemId: "iron-1", time: t(10) }],
+      },
+      {
+        localDate: "2026-09-09",
+        events: [{ id: "skip-2", kind: "supplement_skipped", itemId: "iron-1", time: t(10) }],
+      },
+    ]);
+    expect(insights[0]).toMatchObject({ kind: "frequently_skipped", itemId: "iron-1", count: 2 });
+    expect(insights[0]?.message).not.toContain("absorb");
   });
 });

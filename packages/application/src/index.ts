@@ -1,6 +1,8 @@
 import {
   canonicalizeRegimen,
   assessScheduleQuality,
+  buildConvenienceInsights,
+  buildReminderDecisions,
   buildWeeklyReview,
   compareScheduleSimplification,
   generateAdaptiveSchedule,
@@ -8,6 +10,7 @@ import {
   loadKnowledgeSnapshot,
   type AdaptiveScheduleResult,
   type CanonicalRegimen,
+  type ConvenienceInsight,
   type DayContext,
   type DayEvent,
   type DailyExecutionLog,
@@ -16,6 +19,8 @@ import {
   type ScheduleQualitySummary,
   type ScheduleSimplificationComparison,
   type ScheduleResult,
+  type ReminderDecision,
+  type RoutineTemplate,
   type UserOverride,
   type WeeklyReviewSummary,
 } from "@nutriclock/domain";
@@ -27,6 +32,7 @@ export interface NutriClockAppState {
   schedule: GeneratedScheduleView | null;
   today: AdaptiveScheduleResult | null;
   dailyLogs: DailyExecutionLog[];
+  routineTemplates: RoutineTemplate[];
   rulesetVersionLastEvaluated: string | null;
   evidenceRegistryVersionLastEvaluated: string | null;
   loading: boolean;
@@ -48,7 +54,13 @@ export interface NutriClockApplication {
   ): Promise<AdaptiveScheduleResult | null>;
   getScheduleQuality(): ScheduleQualitySummary | null;
   getScheduleSimplification(): ScheduleSimplificationComparison | null;
+  getReminderDecisions(): ReminderDecision[];
+  getConvenienceInsights(): ConvenienceInsight[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
+  saveRoutineTemplate(template: RoutineTemplate): Promise<NutriClockAppState>;
+  applyRoutineTemplate(templateId: string): Promise<NutriClockAppState>;
+  applyScheduleSimplification(): Promise<NutriClockAppState>;
+  setReminderPreferences(enabled: boolean, leadMinutes: 0 | 15 | 30): Promise<NutriClockAppState>;
   clear(): Promise<void>;
 }
 
@@ -61,6 +73,7 @@ export function createNutriClockApplication(
     schedule: null,
     today: null,
     dailyLogs: [],
+    routineTemplates: [],
     rulesetVersionLastEvaluated: null,
     evidenceRegistryVersionLastEvaluated: null,
     loading: false,
@@ -79,6 +92,7 @@ export function createNutriClockApplication(
         current.evidenceRegistryVersionLastEvaluated,
       regimen: canonicalizeRegimen(regimen),
       dailyLogs: previous?.dailyLogs ?? current.dailyLogs,
+      routineTemplates: previous?.routineTemplates ?? current.routineTemplates,
     };
     await repository.save(state);
     return state;
@@ -94,6 +108,7 @@ export function createNutriClockApplication(
         rulesetVersionLastEvaluated: knowledge.rulesetVersion,
         evidenceRegistryVersionLastEvaluated: knowledge.evidenceRegistryVersion,
         dailyLogs: current.dailyLogs,
+        routineTemplates: current.routineTemplates,
       });
     } catch (error) {
       current = {
@@ -133,6 +148,7 @@ export function createNutriClockApplication(
             schedule: null,
             today: null,
             dailyLogs: [],
+            routineTemplates: [],
             rulesetVersionLastEvaluated: null,
             evidenceRegistryVersionLastEvaluated: null,
           };
@@ -149,6 +165,7 @@ export function createNutriClockApplication(
           schedule: null,
           today: null,
           dailyLogs: persisted.dailyLogs ?? [],
+          routineTemplates: persisted.routineTemplates ?? [],
           rulesetVersionLastEvaluated: persisted.rulesetVersionLastEvaluated,
           evidenceRegistryVersionLastEvaluated: persisted.evidenceRegistryVersionLastEvaluated,
           knowledgeUpdateAvailable,
@@ -237,9 +254,79 @@ export function createNutriClockApplication(
       if (!current.regimen) return null;
       return compareScheduleSimplification(current.regimen, knowledge);
     },
+    getReminderDecisions() {
+      if (!current.regimen || !current.today) return [];
+      return buildReminderDecisions(current.today, current.regimen.preferences);
+    },
+    getConvenienceInsights() {
+      if (!current.regimen) return [];
+      return buildConvenienceInsights(current.regimen, current.dailyLogs);
+    },
     getWeeklyReview(weekStart) {
       if (!current.regimen) return null;
       return buildWeeklyReview(current.regimen, current.dailyLogs, weekStart);
+    },
+    async saveRoutineTemplate(template) {
+      if (!current.regimen) return current;
+      try {
+        const routineTemplates = [
+          ...current.routineTemplates.filter((entry) => entry.id !== template.id),
+          template,
+        ].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+        await save(current.regimen, {
+          ...createEmptyState(current.regimen),
+          routineTemplates,
+          dailyLogs: current.dailyLogs,
+          rulesetVersionLastEvaluated: current.rulesetVersionLastEvaluated,
+          evidenceRegistryVersionLastEvaluated: current.evidenceRegistryVersionLastEvaluated,
+        });
+        current = { ...current, routineTemplates, error: null };
+        return current;
+      } catch (error) {
+        current = {
+          ...current,
+          error: error instanceof Error ? error.message : "Unable to save the routine template.",
+        };
+        return current;
+      }
+    },
+    async applyRoutineTemplate(templateId) {
+      const template = current.routineTemplates.find((entry) => entry.id === templateId);
+      if (!current.regimen || !template) return current;
+      return this.replaceRegimen({ ...current.regimen, routine: template.routine });
+    },
+    async applyScheduleSimplification() {
+      if (!current.regimen) return current;
+      const comparison = compareScheduleSimplification(current.regimen, knowledge);
+      if (!comparison.canSimplify) return current;
+      const simplerTimes = new Map(
+        comparison.simpler.items
+          .filter((item) => item.kind === "supplement" && item.time)
+          .map((item) => [item.sourceId, item]),
+      );
+      const overrides = [
+        ...current.regimen.overrides.filter((override) => !simplerTimes.has(override.itemId)),
+        ...[...simplerTimes.entries()].map(([itemId, item]) => ({
+          id: `simplification:${itemId}`,
+          itemId,
+          selectedTime: item.time!,
+          kind: "preference_override" as const,
+          acknowledgedRuleIds: item.influencingRuleIds,
+          createdFromRulesetVersion: knowledge.rulesetVersion,
+        })),
+      ];
+      return this.replaceRegimen({ ...current.regimen, overrides });
+    },
+    async setReminderPreferences(enabled, leadMinutes) {
+      if (!current.regimen) return current;
+      return this.replaceRegimen({
+        ...current.regimen,
+        preferences: {
+          ...current.regimen.preferences,
+          remindersEnabled: enabled,
+          reminderLeadMinutes: leadMinutes,
+        },
+      });
     },
     generate,
     async clear() {
@@ -250,6 +337,7 @@ export function createNutriClockApplication(
           schedule: null,
           today: null,
           dailyLogs: [],
+          routineTemplates: [],
           rulesetVersionLastEvaluated: null,
           evidenceRegistryVersionLastEvaluated: null,
           loading: false,
