@@ -328,6 +328,53 @@ select:focus-visible {
 .now-card p {
   margin: 6px 0 0;
 }
+.availability-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.availability-group {
+  padding: 14px;
+  border: 1px solid #cddbd1;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+.availability-group h3 {
+  margin: 0 0 8px;
+  color: #173f38;
+  font-size: 0.95rem;
+}
+.availability-group p {
+  color: #62756c;
+  font-size: 0.9rem;
+}
+.availability-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.availability-group li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0;
+  border-top: 1px solid #e0e7df;
+}
+.availability-group li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.availability-group li span {
+  color: #62756c;
+  font-size: 0.85rem;
+}
+.availability-now {
+  border-color: #8fbeaa;
+}
+.availability-waiting {
+  border-color: #e4bf6a;
+}
 .reminder-panel {
   margin-top: 16px;
   padding-top: 14px;
@@ -345,11 +392,55 @@ select:focus-visible {
   gap: 10px;
   align-items: end;
 }
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 13px 20px;
+  font-weight: 750;
+}
 .today-adjust {
   margin: 18px 0;
   padding: 16px;
   border: 1px solid #d7ddd2;
   border-radius: 12px;
+  display: block;
+}
+.adjust-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+.adjust-heading h2,
+.adjust-controls h3 {
+  margin: 0;
+  color: #173f38;
+}
+.adjust-heading .helper {
+  max-width: 420px;
+  margin: 0;
+}
+.adjust-controls {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #d7ddd2;
+}
+.adjust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+.adjust-row label {
+  min-width: 160px;
+  flex: 1;
+}
+.adjust-row button {
+  margin-top: 0;
 }
 .today-adjust label {
   min-width: 150px;
@@ -448,6 +539,22 @@ select:focus-visible {
   align-items: end;
   margin: 22px 0;
 }
+.template-create-form {
+  display: block;
+  padding: 18px;
+  border: 1px solid #d7ddd2;
+  border-radius: 14px;
+}
+.template-create-form > label {
+  display: block;
+  max-width: 420px;
+}
+.template-create-form > .metadata {
+  margin: 14px 0 0;
+}
+.routine-grid {
+  margin: 18px 0 0;
+}
 .template-create label {
   flex: 1;
   min-width: 220px;
@@ -481,3 +588,5 @@ select:focus-visible {
 .source a + a {
   margin-left: 12px;
 }
+
+

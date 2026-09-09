@@ -1,14 +1,50 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "expo-router";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { formatLocalTime, type RoutineTemplateKind } from "@nutriclock/domain";
+import { formatLocalTime, type MealName } from "@nutriclock/domain";
 import { styles } from "./index";
 import { useNutriClockApplication } from "../src/app-context";
+
+const mealNames: Array<{ name: MealName; label: string }> = [
+  { name: "breakfast", label: "Breakfast" },
+  { name: "lunch", label: "Lunch" },
+  { name: "dinner", label: "Dinner" },
+  { name: "snack", label: "Snack" },
+];
+
+const parseTime = (value: string) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  return { minuteOfDay: (hours ?? 0) * 60 + (minutes ?? 0) };
+};
 
 export default function Routines() {
   const { app, refresh } = useNutriClockApplication();
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<RoutineTemplateKind>("custom");
+  const [wake, setWake] = useState("07:00");
+  const [bedtime, setBedtime] = useState("23:00");
+  const [mealTimes, setMealTimes] = useState<Record<MealName, string>>({
+    breakfast: "",
+    lunch: "",
+    dinner: "",
+    snack: "",
+  });
+  const [beverages, setBeverages] = useState({ coffee: "", tea: "" });
+  useEffect(() => {
+    const routine = app.state.regimen?.routine;
+    if (!routine) return;
+    const valueForMeal = (mealName: MealName) => {
+      const meal = routine.meals.find((entry) => entry.name === mealName);
+      return meal ? `${String(Math.floor(meal.time.minuteOfDay / 60)).padStart(2, "0")}:${String(meal.time.minuteOfDay % 60).padStart(2, "0")}` : "";
+    };
+    const valueForBeverage = (kind: "coffee" | "tea") => {
+      const beverage = routine.beverages.find((entry) => entry.kind === kind);
+      return beverage ? `${String(Math.floor(beverage.time.minuteOfDay / 60)).padStart(2, "0")}:${String(beverage.time.minuteOfDay % 60).padStart(2, "0")}` : "";
+    };
+    setWake(`${String(Math.floor(routine.wakeTime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.wakeTime.minuteOfDay % 60).padStart(2, "0")}`);
+    setBedtime(`${String(Math.floor(routine.bedtime.minuteOfDay / 60)).padStart(2, "0")}:${String(routine.bedtime.minuteOfDay % 60).padStart(2, "0")}`);
+    setMealTimes(Object.fromEntries(mealNames.map(({ name: mealName }) => [mealName, valueForMeal(mealName)])) as Record<MealName, string>);
+    setBeverages({ coffee: valueForBeverage("coffee"), tea: valueForBeverage("tea") });
+  }, [app.state.regimen]);
   if (!app.state.regimen) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -24,22 +60,38 @@ export default function Routines() {
       </ScrollView>
     );
   }
-  const saveTemplate = async () => {
+  const saveTemplate = async (useCurrentRoutine = false) => {
     const trimmed = name.trim();
     if (!trimmed || !app.state.regimen) return;
     const routine = app.state.regimen.routine;
     await app.saveRoutineTemplate({
       id: `mobile-template-${Date.now()}`,
       name: trimmed,
-      kind,
       routine: {
         ...routine,
-        meals: routine.meals.map((meal) => ({ ...meal })),
-        beverages: routine.beverages.map((beverage) => ({ ...beverage })),
+        wakeTime: useCurrentRoutine ? routine.wakeTime : parseTime(wake),
+        bedtime: useCurrentRoutine ? routine.bedtime : parseTime(bedtime),
+        meals: useCurrentRoutine
+          ? routine.meals.map((meal) => ({ ...meal }))
+          : mealNames
+              .filter(({ name: mealName }) => mealTimes[mealName])
+              .map(({ name: mealName }) => ({
+                id: `mobile-template-${mealName}`,
+                name: mealName,
+                time: parseTime(mealTimes[mealName]),
+              })),
+        beverages: useCurrentRoutine
+          ? routine.beverages.map((beverage) => ({ ...beverage }))
+          : (["coffee", "tea"] as const)
+              .filter((kind) => beverages[kind])
+              .map((kind) => ({
+                id: `mobile-template-${kind}`,
+                kind,
+                time: parseTime(beverages[kind]),
+              })),
       },
     });
     setName("");
-    setKind("custom");
     refresh();
   };
   return (
@@ -48,8 +100,8 @@ export default function Routines() {
         <Text style={styles.eyebrow}>ROUTINES</Text>
         <Text style={{ ...styles.title, fontSize: 30, lineHeight: 34 }}>Routine templates</Text>
         <Text style={styles.body}>
-          Save a day shape such as Office day or Weekend. Applying a template changes routine
-          context only; supplements, doses, and medication anchors stay unchanged.
+          Save a day shape such as Office day, Travel day, or Night shift. Applying a template
+          changes routine context only; supplements, doses, and medication anchors stay unchanged.
         </Text>
         <TextInput
           accessibilityLabel="Template name"
@@ -58,36 +110,36 @@ export default function Routines() {
           onChangeText={setName}
           placeholder="Office day"
         />
-        <Text style={styles.label}>Routine type</Text>
-        <View style={templateStyles.kinds}>
-          {routineKinds.map((entry) => (
-            <Pressable
-              key={entry.value}
-              accessibilityRole="button"
-              accessibilityState={{ selected: kind === entry.value }}
-              style={{
-                ...templateStyles.kind,
-                ...(kind === entry.value ? templateStyles.kindSelected : {}),
-              }}
-              onPress={() => setKind(entry.value)}
-            >
-              <Text
-                style={
-                  kind === entry.value ? templateStyles.kindTextSelected : templateStyles.kindText
-                }
-              >
-                {entry.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          disabled={!name.trim()}
-          onPress={() => void saveTemplate()}
-        >
-          <Text style={styles.buttonText}>Save current routine</Text>
+        <Text style={styles.muted}>
+          Only enter times you know. Blank meals and beverages stay absent from this routine.
+        </Text>
+        <TextInput accessibilityLabel="Wake time" style={styles.input} value={wake} onChangeText={setWake} placeholder="Wake time" />
+        <TextInput accessibilityLabel="Bedtime" style={styles.input} value={bedtime} onChangeText={setBedtime} placeholder="Bedtime" />
+        {mealNames.map(({ name: mealName, label }) => (
+          <TextInput
+            key={mealName}
+            accessibilityLabel={`${label} time`}
+            style={styles.input}
+            value={mealTimes[mealName]}
+            onChangeText={(value) => setMealTimes((current) => ({ ...current, [mealName]: value }))}
+            placeholder={`${label} time (optional)`}
+          />
+        ))}
+        {(["coffee", "tea"] as const).map((kind) => (
+          <TextInput
+            key={kind}
+            accessibilityLabel={`${kind} time`}
+            style={styles.input}
+            value={beverages[kind]}
+            onChangeText={(value) => setBeverages((current) => ({ ...current, [kind]: value }))}
+            placeholder={`${kind.toUpperCase()} time (optional)`}
+          />
+        ))}
+        <Pressable accessibilityRole="button" style={styles.button} disabled={!name.trim()} onPress={() => void saveTemplate()}>
+          <Text style={styles.buttonText}>Save travel / shift routine</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" style={styles.button} disabled={!name.trim()} onPress={() => void saveTemplate(true)}>
+          <Text style={styles.buttonText}>Save current routine instead</Text>
         </Pressable>
         {app.state.routineTemplates.length ? (
           app.state.routineTemplates.map((template) => (
@@ -96,9 +148,6 @@ export default function Routines() {
               <Text style={styles.muted}>
                 Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
                 {formatLocalTime(template.routine.bedtime)}
-                {template.kind
-                  ? ` · ${routineKinds.find((entry) => entry.value === template.kind)?.label}`
-                  : ""}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -123,26 +172,6 @@ export default function Routines() {
 const templateStyles = {
   item: { borderTopWidth: 1, borderTopColor: "#d7ddd2", paddingVertical: 14 },
   title: { color: "#173f38", fontSize: 18, fontWeight: "800" as const },
-  kinds: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8, marginBottom: 10 },
-  kind: {
-    borderWidth: 1,
-    borderColor: "#bfcac1",
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  kindSelected: { backgroundColor: "#dcece5", borderColor: "#175f52" },
-  kindText: { color: "#53655e" },
-  kindTextSelected: { color: "#175f52", fontWeight: "800" as const },
 };
 
-const routineKinds: Array<{ value: RoutineTemplateKind; label: string }> = [
-  { value: "weekday", label: "Weekday" },
-  { value: "weekend", label: "Weekend" },
-  { value: "office", label: "Office" },
-  { value: "work_from_home", label: "WFH" },
-  { value: "travel", label: "Travel" },
-  { value: "night_shift", label: "Night shift" },
-  { value: "fasting", label: "Fasting" },
-  { value: "custom", label: "Custom" },
-];
+

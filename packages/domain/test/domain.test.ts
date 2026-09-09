@@ -480,7 +480,10 @@ describe("deterministic scheduler", () => {
       { localDate: "2026-09-08", now: t(8), events: [] },
       loadKnowledgeSnapshot(),
     );
-    expect(tooSoon.availability.find((entry) => entry.itemId === "iron-1")?.status).toBe("wait");
+    expect(tooSoon.availability.find((entry) => entry.itemId === "iron-1")).toMatchObject({
+      status: "wait",
+      nextValidTime: t(11),
+    });
     const validNow = generateAdaptiveSchedule(
       input,
       { localDate: "2026-09-08", now: t(11), events: [] },
