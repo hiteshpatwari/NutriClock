@@ -1,6 +1,8 @@
 import {
   canonicalizeRegimen,
   assessScheduleQuality,
+  applyConvenienceProfile,
+  buildConvenienceProfile,
   buildConvenienceInsights,
   buildReminderDecisions,
   buildWeeklyReview,
@@ -8,6 +10,7 @@ import {
   generateAdaptiveSchedule,
   generateSchedule,
   loadKnowledgeSnapshot,
+  queryWhatCanITakeNow,
   type AdaptiveScheduleResult,
   type CanonicalRegimen,
   type ConvenienceInsight,
@@ -23,6 +26,7 @@ import {
   type RoutineTemplate,
   type UserOverride,
   type WeeklyReviewSummary,
+  type WhatCanITakeNowResult,
 } from "@nutriclock/domain";
 import { createEmptyState, type RegimenRepository } from "@nutriclock/persistence";
 import type { PersistedNutriClockState } from "@nutriclock/domain";
@@ -55,6 +59,7 @@ export interface NutriClockApplication {
   getScheduleQuality(): ScheduleQualitySummary | null;
   getScheduleSimplification(): ScheduleSimplificationComparison | null;
   getReminderDecisions(): ReminderDecision[];
+  getWhatCanITakeNow(): WhatCanITakeNowResult | null;
   getConvenienceInsights(): ConvenienceInsight[];
   getWeeklyReview(weekStart: string): WeeklyReviewSummary | null;
   saveRoutineTemplate(template: RoutineTemplate): Promise<NutriClockAppState>;
@@ -98,13 +103,19 @@ export function createNutriClockApplication(
     return state;
   };
 
+  const regimenForScheduling = (): CanonicalRegimen | null =>
+    current.regimen
+      ? applyConvenienceProfile(current.regimen, buildConvenienceProfile(current.dailyLogs))
+      : null;
+
   const generate = async (): Promise<GeneratedScheduleView | null> => {
-    if (!current.regimen) return null;
-    const schedule: ScheduleResult = generateSchedule(current.regimen, knowledge);
+    const schedulingRegimen = regimenForScheduling();
+    if (!schedulingRegimen) return null;
+    const schedule: ScheduleResult = generateSchedule(schedulingRegimen, knowledge);
     const view: GeneratedScheduleView = { schedule, generatedAt: new Date().toISOString() };
     try {
       await repository.save({
-        ...createEmptyState(current.regimen),
+        ...createEmptyState(schedulingRegimen),
         rulesetVersionLastEvaluated: knowledge.rulesetVersion,
         evidenceRegistryVersionLastEvaluated: knowledge.evidenceRegistryVersion,
         dailyLogs: current.dailyLogs,
@@ -214,7 +225,11 @@ export function createNutriClockApplication(
       if (!current.regimen) return null;
       const log = current.dailyLogs.find((entry) => entry.localDate === localDate);
       const context: DayContext = { localDate, now, events: log?.events ?? [] };
-      const today = generateAdaptiveSchedule(current.regimen, context, knowledge);
+      const schedulingRegimen = regimenForScheduling();
+      const today = schedulingRegimen
+        ? generateAdaptiveSchedule(schedulingRegimen, context, knowledge)
+        : null;
+      if (!today) return null;
       current = { ...current, today };
       return today;
     },
@@ -233,6 +248,7 @@ export function createNutriClockApplication(
         await save(current.regimen, {
           ...createEmptyState(current.regimen),
           dailyLogs,
+          routineTemplates: current.routineTemplates,
           rulesetVersionLastEvaluated: current.rulesetVersionLastEvaluated,
           evidenceRegistryVersionLastEvaluated: current.evidenceRegistryVersionLastEvaluated,
         });
@@ -247,16 +263,21 @@ export function createNutriClockApplication(
       }
     },
     getScheduleQuality() {
-      if (!current.regimen) return null;
-      return assessScheduleQuality(generateSchedule(current.regimen, knowledge));
+      const schedulingRegimen = regimenForScheduling();
+      if (!schedulingRegimen) return null;
+      return assessScheduleQuality(generateSchedule(schedulingRegimen, knowledge));
     },
     getScheduleSimplification() {
-      if (!current.regimen) return null;
-      return compareScheduleSimplification(current.regimen, knowledge);
+      const schedulingRegimen = regimenForScheduling();
+      if (!schedulingRegimen) return null;
+      return compareScheduleSimplification(schedulingRegimen, knowledge);
     },
     getReminderDecisions() {
       if (!current.regimen || !current.today) return [];
       return buildReminderDecisions(current.today, current.regimen.preferences);
+    },
+    getWhatCanITakeNow() {
+      return current.today ? queryWhatCanITakeNow(current.today) : null;
     },
     getConvenienceInsights() {
       if (!current.regimen) return [];
@@ -297,7 +318,9 @@ export function createNutriClockApplication(
     },
     async applyScheduleSimplification() {
       if (!current.regimen) return current;
-      const comparison = compareScheduleSimplification(current.regimen, knowledge);
+      const schedulingRegimen = regimenForScheduling();
+      if (!schedulingRegimen) return current;
+      const comparison = compareScheduleSimplification(schedulingRegimen, knowledge);
       if (!comparison.canSimplify) return current;
       const simplerTimes = new Map(
         comparison.simpler.items

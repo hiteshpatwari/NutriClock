@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assessScheduleQuality,
+  applyConvenienceProfile,
+  buildConvenienceProfile,
   buildConvenienceInsights,
   buildReminderDecisions,
   buildWeeklyReview,
@@ -9,6 +11,7 @@ import {
   generateAdaptiveSchedule,
   loadKnowledgeSnapshot,
   normalizeDose,
+  queryWhatCanITakeNow,
   SUPPLEMENT_CATALOG,
   validateKnowledgeSnapshot,
   type SchedulerOptions,
@@ -429,6 +432,7 @@ describe("deterministic scheduler", () => {
       "snoozed",
     );
     expect(result.schedule.items.some((entry) => entry.id === "iron-1")).toBe(false);
+    expect(result.remainingItems.every((entry) => entry.item.id !== "iron-1")).toBe(true);
   });
 
   it("keeps fixed medication anchors visible and does not turn execution events into regimen edits", () => {
@@ -453,6 +457,11 @@ describe("deterministic scheduler", () => {
     );
     expect(result.items.find((entry) => entry.item.id === "med-1")?.item.time).toEqual(t(7));
     expect(result.schedule.items.find((entry) => entry.id === "iron-1")?.time).toEqual(t(12));
+    expect(result.medications[0]).toMatchObject({
+      status: "taken",
+      scheduledTime: t(7),
+      recordedTime: t(8),
+    });
     expect(input.medications[0]?.administrationTime).toEqual(t(7));
   });
 
@@ -582,5 +591,40 @@ describe("deterministic scheduler", () => {
     ]);
     expect(insights[0]).toMatchObject({ kind: "frequently_skipped", itemId: "iron-1", count: 2 });
     expect(insights[0]?.message).not.toContain("absorb");
+  });
+
+  it("learns only observed convenience timing after enough local observations", () => {
+    const input = regimen([supplement({ id: id("b12-1"), supplementId: "vitamin_b12" })]);
+    const profile = buildConvenienceProfile([
+      {
+        localDate: "2026-09-01",
+        events: [{ id: "taken-1", kind: "supplement_taken", itemId: "b12-1", time: t(9) }],
+      },
+      {
+        localDate: "2026-09-02",
+        events: [{ id: "taken-2", kind: "supplement_taken", itemId: "b12-1", time: t(10) }],
+      },
+      {
+        localDate: "2026-09-03",
+        events: [{ id: "taken-3", kind: "supplement_taken", itemId: "b12-1", time: t(11) }],
+      },
+    ]);
+    expect(profile.preferences[0]).toMatchObject({ itemId: "b12-1", observations: 3 });
+    const personalized = applyConvenienceProfile(input, profile);
+    expect(personalized.supplements[0]?.preferredTime).toEqual(t(10));
+    expect(input.supplements[0]?.preferredTime).toBeUndefined();
+  });
+
+  it("returns a remaining-day what-can-I-take-now query without scheduling into the past", () => {
+    const input = regimen([
+      supplement({ id: id("b12-1"), supplementId: "vitamin_b12", preferredTime: t(8) }),
+    ]);
+    const today = generateAdaptiveSchedule(
+      input,
+      { localDate: "2026-09-08", now: t(12), events: [] },
+      loadKnowledgeSnapshot(),
+    );
+    expect(today.schedule.items.find((entry) => entry.id === "b12-1")?.time).toEqual(t(12));
+    expect(queryWhatCanITakeNow(today).available[0]?.item.id).toBe("b12-1");
   });
 });

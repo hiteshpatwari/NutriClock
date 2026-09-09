@@ -15,6 +15,7 @@ import {
   type LocalTime,
   type MedicationAnchor,
   type RoutineTemplate,
+  type RoutineTemplateKind,
   type SupplementEntry,
   type SupplementFormId,
 } from "@nutriclock/domain";
@@ -65,6 +66,17 @@ const formLabels: Record<SupplementFormId, string> = {
   calcium_carbonate: "Calcium carbonate",
   calcium_citrate: "Calcium citrate",
 };
+
+const routineKinds: Array<{ value: RoutineTemplateKind; label: string }> = [
+  { value: "weekday", label: "Weekday" },
+  { value: "weekend", label: "Weekend" },
+  { value: "office", label: "Office" },
+  { value: "work_from_home", label: "Work from home" },
+  { value: "travel", label: "Travel" },
+  { value: "night_shift", label: "Night shift" },
+  { value: "fasting", label: "Fasting day" },
+  { value: "custom", label: "Custom" },
+];
 
 function useApplication(): { app: NutriClockApplication; refresh: () => void } {
   const app = useMemo(() => createNutriClockApplication(createIndexedDbRepository()), []);
@@ -200,6 +212,7 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
   const [wakeValue, setWakeValue] = useState(inputTime(now));
   const [coffeeValue, setCoffeeValue] = useState(inputTime(now));
   const [mealValue, setMealValue] = useState(inputTime(now));
+  const [bedtimeValue, setBedtimeValue] = useState(inputTime(now));
   const date = localDateKey();
   const refreshToday = () => {
     const current = localNow();
@@ -261,6 +274,16 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         ) : (
           <p>No supplement is currently marked available. Review the next windows below.</p>
         )}
+        {today?.availability
+          .filter((entry) => entry.status === "wait")
+          .slice(0, 3)
+          .map((entry) => (
+            <p key={`wait:${entry.itemId}`} className="reminder-line">
+              {today.items.find((item) => item.item.id === entry.itemId)?.item.displayName} next
+              valid window:{" "}
+              {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available yet"}.
+            </p>
+          ))}
         <div className="reminder-panel">
           <strong>Local reminder guidance</strong>
           <p>
@@ -318,6 +341,19 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
           }
         >
           Record breakfast now
+        </button>
+        <button
+          className="secondary"
+          onClick={() =>
+            void record({
+              id: newId(),
+              kind: "meal_skipped",
+              mealName: "breakfast",
+              time: now,
+            })
+          }
+        >
+          Skip breakfast today
         </button>
       </div>
       <div className="today-adjust">
@@ -379,6 +415,22 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
         >
           Move coffee
         </button>
+        <label>
+          Bedtime today
+          <input
+            type="time"
+            value={bedtimeValue}
+            onChange={(event) => setBedtimeValue(event.target.value)}
+          />
+        </label>
+        <button
+          className="secondary"
+          onClick={() =>
+            void record({ id: newId(), kind: "bedtime_changed", time: time(bedtimeValue) })
+          }
+        >
+          Apply bedtime
+        </button>
       </div>
       <div className="today-timeline">
         {today?.items.map((entry) => (
@@ -402,6 +454,23 @@ function TodayPage({ app }: { app: NutriClockApplication }) {
                           : "Upcoming"}
               </p>
             </div>
+            {entry.item.fixed && (
+              <div className="today-item-actions">
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    void record({
+                      id: newId(),
+                      kind: "medication_taken",
+                      anchorId: entry.item.sourceId,
+                      time: localNow(),
+                    })
+                  }
+                >
+                  Record taken now
+                </button>
+              </div>
+            )}
             {!entry.item.fixed && entry.executionStatus === "planned" && (
               <div className="today-item-actions">
                 <button
@@ -598,6 +667,7 @@ function ReviewPage({ app }: { app: NutriClockApplication }) {
 function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
   const [, setRevision] = useState(0);
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<RoutineTemplateKind>("custom");
   if (!app.state.regimen) {
     return (
       <section className="card">
@@ -616,6 +686,7 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
     const template: RoutineTemplate = {
       id: newId(),
       name: trimmed,
+      kind,
       routine: {
         ...routine,
         meals: routine.meals.map((meal) => ({ ...meal })),
@@ -624,6 +695,7 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
     };
     await app.saveRoutineTemplate(template);
     setName("");
+    setKind("custom");
     setRevision((value) => value + 1);
   };
   const applyTemplate = async (templateId: string) => {
@@ -648,6 +720,19 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
             placeholder="Office day"
           />
         </label>
+        <label>
+          Routine type
+          <select
+            value={kind}
+            onChange={(event) => setKind(event.target.value as RoutineTemplateKind)}
+          >
+            {routineKinds.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button onClick={() => void saveTemplate()} disabled={!name.trim()}>
           Save current routine
         </button>
@@ -660,7 +745,9 @@ function RoutineTemplatesPage({ app }: { app: NutriClockApplication }) {
                 <h2>{template.name}</h2>
                 <p className="metadata">
                   Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
-                  {formatLocalTime(template.routine.bedtime)} · {template.routine.meals.length} meal
+                  {formatLocalTime(template.routine.bedtime)} ·{" "}
+                  {routineKinds.find((entry) => entry.value === template.kind)?.label ?? "Custom"} ·{" "}
+                  {template.routine.meals.length} meal
                   {template.routine.meals.length === 1 ? "" : "s"}
                 </p>
               </div>

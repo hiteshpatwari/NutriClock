@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Link } from "expo-router";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { formatLocalTime } from "@nutriclock/domain";
+import { formatLocalTime, type RoutineTemplateKind } from "@nutriclock/domain";
 import { styles } from "./index";
 import { useNutriClockApplication } from "../src/app-context";
 
 export default function Routines() {
   const { app, refresh } = useNutriClockApplication();
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<RoutineTemplateKind>("custom");
   if (!app.state.regimen) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -30,6 +31,7 @@ export default function Routines() {
     await app.saveRoutineTemplate({
       id: `mobile-template-${Date.now()}`,
       name: trimmed,
+      kind,
       routine: {
         ...routine,
         meals: routine.meals.map((meal) => ({ ...meal })),
@@ -37,6 +39,7 @@ export default function Routines() {
       },
     });
     setName("");
+    setKind("custom");
     refresh();
   };
   return (
@@ -55,6 +58,29 @@ export default function Routines() {
           onChangeText={setName}
           placeholder="Office day"
         />
+        <Text style={styles.label}>Routine type</Text>
+        <View style={templateStyles.kinds}>
+          {routineKinds.map((entry) => (
+            <Pressable
+              key={entry.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: kind === entry.value }}
+              style={{
+                ...templateStyles.kind,
+                ...(kind === entry.value ? templateStyles.kindSelected : {}),
+              }}
+              onPress={() => setKind(entry.value)}
+            >
+              <Text
+                style={
+                  kind === entry.value ? templateStyles.kindTextSelected : templateStyles.kindText
+                }
+              >
+                {entry.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <Pressable
           accessibilityRole="button"
           style={styles.button}
@@ -70,6 +96,9 @@ export default function Routines() {
               <Text style={styles.muted}>
                 Wake {formatLocalTime(template.routine.wakeTime)} · Bedtime{" "}
                 {formatLocalTime(template.routine.bedtime)}
+                {template.kind
+                  ? ` · ${routineKinds.find((entry) => entry.value === template.kind)?.label}`
+                  : ""}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -94,4 +123,26 @@ export default function Routines() {
 const templateStyles = {
   item: { borderTopWidth: 1, borderTopColor: "#d7ddd2", paddingVertical: 14 },
   title: { color: "#173f38", fontSize: 18, fontWeight: "800" as const },
+  kinds: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8, marginBottom: 10 },
+  kind: {
+    borderWidth: 1,
+    borderColor: "#bfcac1",
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  kindSelected: { backgroundColor: "#dcece5", borderColor: "#175f52" },
+  kindText: { color: "#53655e" },
+  kindTextSelected: { color: "#175f52", fontWeight: "800" as const },
 };
+
+const routineKinds: Array<{ value: RoutineTemplateKind; label: string }> = [
+  { value: "weekday", label: "Weekday" },
+  { value: "weekend", label: "Weekend" },
+  { value: "office", label: "Office" },
+  { value: "work_from_home", label: "WFH" },
+  { value: "travel", label: "Travel" },
+  { value: "night_shift", label: "Night shift" },
+  { value: "fasting", label: "Fasting" },
+  { value: "custom", label: "Custom" },
+];
