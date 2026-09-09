@@ -79,7 +79,7 @@ describe("web and mobile platform UX contracts", () => {
     for (const platform of [web, medications]) {
       expect(platform).toContain('? { kind: "unsupported"');
     }
-    expect(web).toMatch(/never changes your supplements, doses, or\s+medication anchors/s);
+    expect(web).toMatch(/never changes your supplements,\s+doses, or\s+medication anchors/s);
     expect(routines).toContain("supplements, doses, and medication anchors stay unchanged");
   });
 });

@@ -288,12 +288,9 @@ export function createNutriClockApplication(
     },
     getWhatCanITakeNow() {
       if (!current.today || !current.regimen) return null;
-      return queryWhatCanITakeNow(
-        current.regimen,
-        current.today.context,
-        knowledge,
-        { conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs) },
-      );
+      return queryWhatCanITakeNow(current.regimen, current.today.context, knowledge, {
+        conveniencePreferences: deriveConveniencePreferences(current.regimen, current.dailyLogs),
+      });
     },
     getConvenienceInsights() {
       if (!current.regimen) return [];

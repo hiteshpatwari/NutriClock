@@ -96,9 +96,16 @@ describe("NutriClock V2 deterministic golden scenarios", () => {
     expect(result.context).toEqual(context);
     expect(result.schedule.status).toBe("complete");
     expect(medicationItem).toMatchObject({
-      executionStatus: "planned",
+      executionStatus: "taken",
       availableNow: false,
       item: { time: t(7), fixed: true, timingState: "scheduled" },
+    });
+    expect(result.medications).toContainEqual({
+      anchorId: "levothyroxine-1",
+      displayName: "Levothyroxine / Synthroid",
+      status: "taken",
+      scheduledTime: t(7),
+      recordedTime: t(8),
     });
     expect(ironItem).toMatchObject({
       executionStatus: "planned",

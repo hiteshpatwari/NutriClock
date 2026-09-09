@@ -53,7 +53,13 @@ export const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   card: { backgroundColor: "#fffdf8", borderRadius: 18, padding: 22, marginBottom: 16 },
   label: { color: "#334940", fontWeight: "700", marginBottom: 14 },
-  sectionTitle: { color: "#175f52", fontWeight: "800", fontSize: 16, marginTop: 14, marginBottom: 6 },
+  sectionTitle: {
+    color: "#175f52",
+    fontWeight: "800",
+    fontSize: 16,
+    marginTop: 14,
+    marginBottom: 6,
+  },
   input: {
     backgroundColor: "#fff",
     borderColor: "#bfcac1",
@@ -65,5 +71,3 @@ export const styles = StyleSheet.create({
   },
   link: { color: "#175f52", fontWeight: "800", marginVertical: 10 },
 });
-
-
