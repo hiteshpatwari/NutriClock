@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "expo-router";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { formatLocalTime, type DayEvent, type LocalTime } from "@nutriclock/domain";
+import { formatLocalTime, type DayEvent, type LocalTime, type MealName } from "@nutriclock/domain";
 import { styles } from "./index";
 import { useNutriClockApplication } from "../src/app-context";
 
@@ -26,12 +26,27 @@ const parseTime = (value: string): LocalTime => {
   const [hour, minute] = value.split(":").map(Number);
   return { minuteOfDay: (hour ?? 0) * 60 + (minute ?? 0) };
 };
+const inputTime = (value: LocalTime) =>
+  `${String(Math.floor(value.minuteOfDay / 60)).padStart(2, "0")}:${String(value.minuteOfDay % 60).padStart(2, "0")}`;
+const mealNames: Array<{ name: MealName; label: string }> = [
+  { name: "breakfast", label: "Breakfast" },
+  { name: "lunch", label: "Lunch" },
+  { name: "dinner", label: "Dinner" },
+  { name: "snack", label: "Snack" },
+];
 
 export default function Today() {
   const { app, refresh } = useNutriClockApplication();
   const [now, setNow] = useState(nowTime());
   const [wake, setWake] = useState("07:00");
-  const [coffee, setCoffee] = useState("08:00");
+  const [bedtime, setBedtime] = useState("23:00");
+  const [mealTimes, setMealTimes] = useState<Record<MealName, string>>({
+    breakfast: "08:00",
+    lunch: "12:00",
+    dinner: "18:00",
+    snack: "15:00",
+  });
+  const [beverages, setBeverages] = useState({ coffee: "08:00", tea: "15:00" });
   const day = dateKey();
   useEffect(() => {
     const update = () => {
@@ -44,6 +59,28 @@ export default function Today() {
     const timer = setInterval(update, 60_000);
     return () => clearInterval(timer);
   }, [app, day]);
+  useEffect(() => {
+    const routine = app.state.regimen?.routine;
+    if (!routine) return;
+    setWake(inputTime(routine.wakeTime));
+    setBedtime(inputTime(routine.bedtime));
+    setMealTimes(
+      Object.fromEntries(
+        mealNames.map(({ name }) => [
+          name,
+          inputTime(routine.meals.find((meal) => meal.name === name)?.time ?? parseTime(mealTimes[name])),
+        ]),
+      ) as Record<MealName, string>,
+    );
+    setBeverages({
+      coffee: routine.beverages.find((beverage) => beverage.kind === "coffee")
+        ? inputTime(routine.beverages.find((beverage) => beverage.kind === "coffee")!.time)
+        : beverages.coffee,
+      tea: routine.beverages.find((beverage) => beverage.kind === "tea")
+        ? inputTime(routine.beverages.find((beverage) => beverage.kind === "tea")!.time)
+        : beverages.tea,
+    });
+  }, [app.state.regimen]);
   const today = app.state.today;
   const reminderDecisions = app.getReminderDecisions();
   const remindersEnabled = app.state.regimen?.preferences.remindersEnabled === true;
@@ -51,6 +88,16 @@ export default function Today() {
     await app.recordDayEvent(day, nowTime(), event);
     refresh();
   };
+  const itemForAvailability = (itemId: string) =>
+    today?.items.find((entry) => entry.item.sourceId === itemId || entry.item.id === itemId)?.item;
+  const availableNow = today?.availability.filter((entry) => entry.status === "available_now") ?? [];
+  const waiting = today?.availability.filter((entry) => entry.status === "wait") ?? [];
+  const unavailable = today?.availability.filter((entry) => entry.status === "unavailable_today") ?? [];
+  const medicationTakenIds = new Set(
+    (today?.context.events ?? [])
+      .filter((event): event is Extract<DayEvent, { kind: "medication_taken" }> => event.kind === "medication_taken")
+      .map((event) => event.anchorId),
+  );
   if (!app.state.regimen) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -82,17 +129,30 @@ export default function Today() {
           <Text style={{ color: "#175f52", fontWeight: "800", marginBottom: 6 }}>
             What can I take now?
           </Text>
-          {today?.availability.filter((entry) => entry.status === "available_now").length ? (
-            today.availability
-              .filter((entry) => entry.status === "available_now")
-              .map((entry) => (
+          <Text style={styles.muted}>
+            Timing based on today's recorded context. No supplement, dose, or make-up dose is recommended here.
+          </Text>
+          <Text style={styles.sectionTitle}>Available now</Text>
+          {availableNow.length ? availableNow.map((entry) => (
+            <Text key={entry.itemId} style={styles.body}>
+              {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}: {entry.message}
+            </Text>
+          )) : <Text style={styles.body}>Nothing is marked available right now.</Text>}
+          <Text style={styles.sectionTitle}>Waiting for a valid window</Text>
+          {waiting.length ? waiting.map((entry) => (
+            <Text key={entry.itemId} style={styles.body}>
+              {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId} · Next valid time: {entry.nextValidTime ? formatLocalTime(entry.nextValidTime) : "not available"}
+            </Text>
+          )) : <Text style={styles.body}>No supplement is waiting on a later window.</Text>}
+          {unavailable.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>No supported window today</Text>
+              {unavailable.map((entry) => (
                 <Text key={entry.itemId} style={styles.body}>
-                  {today.items.find((item) => item.item.id === entry.itemId)?.item.displayName} is
-                  available based on your recorded day context.
+                  {itemForAvailability(entry.itemId)?.displayName ?? entry.itemId}: {entry.message}
                 </Text>
-              ))
-          ) : (
-            <Text style={styles.body}>No supplement is currently marked available.</Text>
+              ))}
+            </>
           )}
           <View
             style={{ borderTopWidth: 1, borderTopColor: "#b4d0bf", marginTop: 12, paddingTop: 12 }}
@@ -127,7 +187,8 @@ export default function Today() {
                 ))}
           </View>
         </View>
-        <Text style={styles.label}>Adjust today</Text>
+        <Text style={styles.sectionTitle}>Adjust today's context</Text>
+        <Text style={styles.muted}>These records apply to today only. Your saved routine stays unchanged.</Text>
         <TextInput
           accessibilityLabel="New wake time"
           style={styles.input}
@@ -149,10 +210,43 @@ export default function Today() {
           <Text style={styles.buttonText}>Apply wake time</Text>
         </Pressable>
         <TextInput
+          accessibilityLabel="Bedtime"
+          style={styles.input}
+          value={bedtime}
+          onChangeText={setBedtime}
+          placeholder="Bedtime"
+        />
+        <Pressable
+          accessibilityRole="button"
+          style={styles.button}
+          onPress={() => void record({ id: "mobile-day-bedtime-" + Date.now(), kind: "bedtime_changed", time: parseTime(bedtime) })}
+        >
+          <Text style={styles.buttonText}>Record bedtime</Text>
+        </Pressable>
+        <Text style={styles.label}>Meals</Text>
+        {mealNames.map(({ name, label }) => (
+          <View key={name}>
+            <TextInput
+              accessibilityLabel={`${label} time`}
+              style={styles.input}
+              value={mealTimes[name]}
+              onChangeText={(value) => setMealTimes((current) => ({ ...current, [name]: value }))}
+              placeholder={`${label} time`}
+            />
+            <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: `mobile-day-${name}-` + Date.now(), kind: "meal_recorded", mealName: name, time: parseTime(mealTimes[name]) })}>
+              <Text style={styles.buttonText}>Record {label.toLowerCase()}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void record({ id: `mobile-day-${name}-skip-` + Date.now(), kind: "meal_skipped", mealName: name, time: nowTime() })}>
+              <Text style={styles.link}>Skip {label.toLowerCase()}</Text>
+            </Pressable>
+          </View>
+        ))}
+        <Text style={styles.label}>Beverages</Text>
+        <TextInput
           accessibilityLabel="Coffee time"
           style={styles.input}
-          value={coffee}
-          onChangeText={setCoffee}
+          value={beverages.coffee}
+          onChangeText={(value) => setBeverages((current) => ({ ...current, coffee: value }))}
           placeholder="Coffee time"
         />
         <Pressable
@@ -163,11 +257,27 @@ export default function Today() {
               id: "mobile-day-coffee-" + Date.now(),
               kind: "beverage_recorded",
               beverageKind: "coffee",
-              time: parseTime(coffee),
+              time: parseTime(beverages.coffee),
             })
           }
         >
           <Text style={styles.buttonText}>Record coffee time</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void record({ id: "mobile-day-coffee-skip-" + Date.now(), kind: "beverage_skipped", beverageKind: "coffee", time: nowTime() })}>
+          <Text style={styles.link}>Skip coffee</Text>
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Tea time"
+          style={styles.input}
+          value={beverages.tea}
+          onChangeText={(value) => setBeverages((current) => ({ ...current, tea: value }))}
+          placeholder="Tea time"
+        />
+        <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: "mobile-day-tea-" + Date.now(), kind: "beverage_recorded", beverageKind: "tea", time: parseTime(beverages.tea) })}>
+          <Text style={styles.buttonText}>Record tea time</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void record({ id: "mobile-day-tea-skip-" + Date.now(), kind: "beverage_skipped", beverageKind: "tea", time: nowTime() })}>
+          <Text style={styles.link}>Skip tea</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -256,6 +366,14 @@ export default function Today() {
                   <Text style={styles.link}>Skip</Text>
                 </Pressable>
               </View>
+            )}
+            {entry.item.fixed && !medicationTakenIds.has(entry.item.sourceId) && (
+              <Pressable accessibilityRole="button" style={styles.button} onPress={() => void record({ id: "mobile-day-medication-" + Date.now(), kind: "medication_taken", anchorId: entry.item.sourceId, time: nowTime() })}>
+                <Text style={styles.buttonText}>Record taken</Text>
+              </Pressable>
+            )}
+            {entry.item.fixed && medicationTakenIds.has(entry.item.sourceId) && (
+              <Text style={styles.muted}>Taken today · medication time remains fixed</Text>
             )}
           </View>
         ))}
