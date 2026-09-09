@@ -4,6 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@10.11.1",
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.28",
+      "uuid": "11.1.1",
+      "decode-uri-component": "0.5.0"
+    },
+    "patchedDependencies": {
+      "image-size@1.2.1": "patches/image-size@1.2.1.patch"
+    }
+  },
   "scripts": {
     "dev:web": "pnpm --filter @nutriclock/web dev",
     "build:web": "pnpm --filter @nutriclock/web build",
